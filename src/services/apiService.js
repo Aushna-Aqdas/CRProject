@@ -1,7 +1,7 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const BASE_URL = 'http://10.50.206.55:8000/api';
+const BASE_URL = 'http://10.50.207.61:8000/api';
 
 // Create axios instance
 const apiService = axios.create({
@@ -210,13 +210,29 @@ export const authAPI = {
 
 // ... rest of your API endpoints remain the same ...
 export const userAPI = {
+  // ✅ Dashboard - sab kuch ek call mein: user, projects, queries, recent requests
   getDashboard: () => apiService.get('/user/dashboard'),
-  getHistory: () => apiService.get('/user/history'),
-  getRecentRequests: () => apiService.get('/user/requests/recent'),
+
+  // ✅ All main categories (services/queries dropdown)
   getServices: () => apiService.get('/user/services'),
-  getProjects: (type) => apiService.get(`/user/projects/${type}`),
-  submitChangeRequest: (data) => apiService.post('/user/change-request', data),
+
+  // ✅ Sub-categories when user selects a main category
   getSubQueries: (queryId) => apiService.get(`/user/sub-queries/${queryId}`),
+
+  // ✅ Recent 5 requests (agar alag se chahiye, warna dashboard mein already hai)
+  getRecentRequests: () => apiService.get('/user/requests/recent'),
+
+  // ✅ Full history with pagination
+  getHistory: (perPage = 15) => 
+    apiService.get('/user/history', { params: { per_page: perPage } }),
+
+  // ✅ Submit new enhancement/change request
+  submitChangeRequest: (formData) => 
+    apiService.post('/user/change-request', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data', // Important for files + voice
+      },
+    }),
 };
 
 export const assignerAPI = {
@@ -389,12 +405,4 @@ export default {
   test: testAPI,
   deptHead: deptHeadAPI,
   
-  // Individual methods
-  getUserDashboard: userAPI.getDashboard,
-  getUserHistory: userAPI.getHistory,
-  getRecentRequests: userAPI.getRecentRequests,
-  getServices: userAPI.getServices,
-  getProjects: userAPI.getProjects,
-  submitChangeRequest: userAPI.submitChangeRequest,
-  getSubQueries: userAPI.getSubQueries,
 };

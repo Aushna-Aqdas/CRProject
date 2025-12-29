@@ -57,54 +57,57 @@ const DeptHeadDashboard = ({ navigation }) => {
 
   // ✅ FIXED: Moved fetchStats to useCallback
   const fetchStats = useCallback(async () => {
-    try {
-      // First check if we have a token
-      const hasToken = await checkTokenAndNavigate();
-      if (!hasToken) {
-        setLoading(false);
-        return;
-      }
-
-      setLoading(true);
-      console.log('📊 Fetching dashboard statistics...');
-
-      const response = await api.deptHead.getStatistics();
-
-      if (response.data) {
-        setStats(response.data);
-        console.log('✅ Dashboard stats loaded successfully');
-      }
-    } catch (error) {
-      console.error('❌ Error fetching stats:', error);
-
-      // Handle 401 specifically
-      if (error.response?.status === 401) {
-        console.log('🔒 Token expired or invalid');
-        Alert.alert(
-          'Session Expired',
-          'Your session has expired. Please login again.',
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                // Clear token and navigate to login
-                api.clearToken();
-                navigation.reset({
-                  index: 0,
-                  routes: [{ name: 'Login' }],
-                });
-              },
-            },
-          ],
-        );
-      } else {
-        Alert.alert('Error', 'Failed to load dashboard statistics');
-      }
-    } finally {
+  try {
+    const hasToken = await checkTokenAndNavigate();
+    if (!hasToken) {
       setLoading(false);
-      setRefreshing(false);
+      return;
     }
-  }, [checkTokenAndNavigate, navigation]); // ✅ Added dependencies
+
+    setLoading(true);
+    console.log('📊 Fetching dashboard statistics...');
+
+    const response = await api.deptHead.getStatistics();
+    console.log('Raw API Response:', response.data); // ← ADD THIS FOR DEBUGGING
+
+    if (response.data.success) {
+      // Handle both possible structures
+      const apiData = response.data.data || response.data; // ← KEY FIX
+
+      setStats({
+        pending: apiData.pending || 0,
+        approved: apiData.approved || 0,
+        rejected: apiData.rejected || 0,
+        total: apiData.total || 0,
+        assignedProjects: apiData.assignedProjects || apiData.assigned_projects || 0,
+      });
+
+      console.log('✅ Stats loaded:', apiData);
+    } else {
+      console.warn('API success false:', response.data.message);
+      setStats({ pending: 0, approved: 0, rejected: 0, total: 0, assignedProjects: 0 });
+    }
+  } catch (error) {
+    console.error('❌ Error fetching stats:', error.response || error);
+
+    if (error.response?.status === 401) {
+      Alert.alert('Session Expired', 'Please login again.', [
+        {
+          text: 'OK',
+          onPress: async () => {
+            await api.clearToken();
+            navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+          },
+        },
+      ]);
+    } else {
+      Alert.alert('Error', 'Failed to load statistics. Pull to refresh.');
+    }
+  } finally {
+    setLoading(false);
+    setRefreshing(false);
+  }
+}, [checkTokenAndNavigate, navigation]);
 
   // ✅ FIXED: Simplified useEffect - removed conditional hooks
   useEffect(() => {
@@ -362,7 +365,7 @@ const DeptHeadDashboard = ({ navigation }) => {
 
           <DashboardCard
             title="Current Projects"
-            subtitle="Manage pending requests and view all tasks history"
+            subtitle="Manage pending and completed requests and view all tasks history"
             icon="folder-open"
             color="#06B6D4"
             onPress={() => navigation.navigate('CurrentProjectsScreen')}

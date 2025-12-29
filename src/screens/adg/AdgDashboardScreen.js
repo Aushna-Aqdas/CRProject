@@ -313,7 +313,7 @@ const AdgDashboardScreen = () => {
           </LinearGradient>
         </Animatable.View>
 
-        {/* Developer Performance - FLEXIBLE SOLUTION */}
+               {/* Developer Performance - FULLY VISIBLE & SCROLLABLE */}
         <Animatable.View animation="fadeInUp" duration={800} delay={500} style={styles.chartContainer}>
           <LinearGradient colors={['#ffffff', '#f8f9fa']} style={styles.chartCard}>
             <View style={styles.chartHeader}>
@@ -321,68 +321,51 @@ const AdgDashboardScreen = () => {
               <Text style={styles.sectionTitle}>Developer Performance</Text>
             </View>
             
-            {/* Horizontal Scroll for Chart */}
+            {/* Clear indicator that it's scrollable */}
+            <View style={styles.scrollHint}>
+              <Icon name="arrows-h" size={16} color="#64748B" />
+              <Text style={styles.scrollHintText}>Scroll horizontally to view all developers</Text>
+            </View>
+
             <ScrollView 
               horizontal 
               showsHorizontalScrollIndicator={true}
               contentContainerStyle={styles.horizontalChartContainer}
+              persistentScrollbar={true}
             >
               <BarChart
                 data={{
-                  labels: dashboardData.developerNames.map(name => {
-                    // Smart formatting for labels
-                    const parts = name.split(' ');
-                    if (parts.length > 1) {
-                      return `${parts[0][0]}.${parts[1][0]}`; // J.D.
-                    }
-                    return name.length > 6 ? `${name.substring(0, 5)}.` : name;
-                  }),
-                  datasets: [
-                    {
-                      data: dashboardData.developerCompleted,
-                    },
-                  ],
+                  labels: dashboardData.developerNames,
+                  datasets: [{ data: dashboardData.developerCompleted }],
                 }}
-                width={Math.max(screenWidth - 40, dashboardData.developerNames.length * 50)} // Dynamic width
-                height={220}
+                width={dashboardData.developerNames.length * 80} // Give plenty of space
+                height={240}
+                yAxisLabel=""
+                yAxisSuffix=""
                 chartConfig={developerChartConfig}
-                verticalLabelRotation={-45}
-                style={styles.developerChart}
-                showBarTops={true}
+                verticalLabelRotation={30}
                 fromZero={true}
-                withInnerLines={false}
-                segments={4}
-                barPercentage={0.6}
+                showValuesOnTopOfBars={true}
+                withHorizontalLabels={true}
+                style={styles.developerChart}
               />
             </ScrollView>
-            
-            {/* Enhanced developer list with completion stats */}
+
+            {/* Developer List Below */}
             <View style={styles.developersList}>
               {dashboardData.developerNames.map((name, index) => (
                 <View key={index} style={styles.developerItem}>
                   <View style={styles.developerInfo}>
                     <View style={[styles.developerAvatar, { backgroundColor: getDeveloperColor(index) }]}>
                       <Text style={styles.developerInitials}>
-                        {name.split(' ').map(n => n[0]).join('')}
+                        {name.split(' ').map(n => n[0].toUpperCase()).join('')}
                       </Text>
                     </View>
-                    <View style={styles.developerDetails}>
-                      <Text style={styles.developerName} numberOfLines={1}>
-                        {name}
-                      </Text>
-                      <Text style={styles.developerStats}>
-                        {dashboardData.developerCompleted[index]} completed
-                      </Text>
-                    </View>
+                    <Text style={styles.developerName}>{name}</Text>
                   </View>
-                  <View style={styles.completionBadge}>
-                    <Text style={styles.completionText}>
-                      {calculateCompletionRate(
-                        dashboardData.developerCompleted[index],
-                        dashboardData.developerTotal?.[index]
-                      )}%
-                    </Text>
-                  </View>
+                  <Text style={styles.completionText}>
+                    {dashboardData.developerCompleted[index]} completed
+                  </Text>
                 </View>
               ))}
             </View>

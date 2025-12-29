@@ -5,12 +5,12 @@ import { useAuth } from '../hooks/redux';
 import SplashScreen from '../screens/SplashScreen';
 import LoginScreen from '../screens/auth/LoginScreen';
 // Import all your screens...
-import UserDashboard from '../screens/UserDashboard';
+import UserDashboard from '../screens/user/UserDashboard';
 import ResolverDashboard from '../screens/ResolverDashboard';
 import ResolverRequestDetail from '../screens/ResolverRequestDetail';
 import AssignerDashboardScreen from '../screens/AssignerDashboardScreen';
 import RequestDetailScreen from '../screens/RequestDetailScreen';
-import UserHistoryScreen from '../screens/UserHistoryScreen';
+import UserHistoryScreen from '../screens/user/UserHistoryScreen';
 import DrawerNavigator from './DrawerNavigator';
 import AdgDashboardScreen from '../screens/adg/AdgDashboardScreen';
 import DeptHeadDashboard from '../screens/depthead/DeptHeadDashboard';

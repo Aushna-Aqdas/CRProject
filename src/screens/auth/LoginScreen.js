@@ -625,7 +625,7 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   inputContainer: {
-    marginBottom: 20,
+    marginBottom: 0,
   },
   inputWrapper: {
     flexDirection: 'row',
