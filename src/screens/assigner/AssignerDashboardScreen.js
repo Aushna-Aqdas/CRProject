@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -14,47 +14,72 @@ import {
   RefreshControl,
   Alert,
 } from 'react-native';
-import { useAuth } from '../hooks/redux';
+import { useAuth } from '../../hooks/redux';
 import { useNavigation } from '@react-navigation/native';
 import * as Animatable from 'react-native-animatable';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/FontAwesome';
 import Toast from 'react-native-toast-message';
+import api from '../../services/apiService';
 
 const { width } = Dimensions.get('window');
 
 const AssignerDashboardScreen = () => {
-  const { logout, userApi, user } = useAuth();
+  const { logout, user } = useAuth();
   const navigation = useNavigation();
-  const drawerRef = React.useRef(null);
+  const drawerRef = useRef(null);
 
+  // All hooks declared at the top - NEVER conditional
   const [requests, setRequests] = useState([]);
+  const [stats, setStats] = useState({
+    total: 0,
+    pending: 0,
+    in_progress: 0,
+    completed: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const [error, setError] = useState(null);
 
-  // CORRECT WAY: Use userApi.assigner
+  // Fetch requests function
   const fetchRequests = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // CORRECT API CALL
-      const res = await userApi.assigner.getRequests();
-
+      const res = await api.assigner.getDashboard();
+      
       if (res.data.success) {
         setRequests(res.data.requests || []);
+        setStats(res.data.stats || {
+          total: 0,
+          pending: 0,
+          in_progress: 0,
+          completed: 0,
+        });
       } else {
         setError(res.data.message || 'No requests found');
         setRequests([]);
+        setStats({
+          total: 0,
+          pending: 0,
+          in_progress: 0,
+          completed: 0,
+        });
       }
     } catch (err) {
       console.error('Assigner fetch error:', err);
       const msg = err.response?.data?.message || err.message || 'Network Error';
       setError(msg);
       setRequests([]);
+      setStats({
+        total: 0,
+        pending: 0,
+        in_progress: 0,
+        completed: 0,
+      });
       Toast.show({
         type: 'error',
         text1: 'Failed to load requests',
@@ -66,19 +91,21 @@ const AssignerDashboardScreen = () => {
     }
   };
 
+  // Effects
+  useEffect(() => {
+    fetchRequests();
+  }, []);
+
+  // Handler functions
   const onRefresh = () => {
     setRefreshing(true);
     fetchRequests();
   };
 
-  useEffect(() => {
-    fetchRequests();
-  }, []);
-
   const openDrawer = () => drawerRef.current?.openDrawer();
   const closeDrawer = () => drawerRef.current?.closeDrawer();
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure?', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -92,12 +119,151 @@ const AssignerDashboardScreen = () => {
     ]);
   };
 
+  // Filter requests based on search and filter
+  const filteredRequests = requests.filter(item => {
+    const statusMatch =
+      filter === 'all' || item.status?.toLowerCase() === filter;
+    const searchMatch =
+      (item.user?.name?.toLowerCase() || '').includes(search.toLowerCase()) ||
+      (item.project?.name?.toLowerCase() || '').includes(search.toLowerCase()) ||
+      (item.request_details?.toLowerCase() || '').includes(search.toLowerCase());
+    return statusMatch && searchMatch;
+  });
+
+  // Render functions
+  const renderRequest = ({ item, index }) => (
+    <Animatable.View
+      animation="fadeInUp"
+      duration={600}
+      delay={index * 100}
+      style={styles.requestCard}
+    >
+      <LinearGradient colors={['#ffffff', '#f8f9fa', '#ffffff']} style={styles.cardGradient}>
+        <View style={styles.requestHeader}>
+          <Text style={styles.projectName}>{item.project?.name || 'Unknown Project'}</Text>
+          <Text style={styles.userName}>{item.user?.name || 'Unknown User'}</Text>
+        </View>
+        <Text style={styles.issue} numberOfLines={2}>{item.request_details || 'No details'}</Text>
+
+        <View style={styles.badgesRow}>
+          <Text style={[styles.statusBadge, statusColors[item.status?.toLowerCase()]]}>
+            {item.status_label || item.status || 'unknown'}
+          </Text>
+          
+          {item.via_dept_head === true && (
+            <Text style={styles.deptHeadBadge}>Via Dept Head</Text>
+          )}
+          
+          <Text style={[styles.priorityBadge, priorityColors[item.priority?.toLowerCase()]]}>
+            {item.priority_label || item.priority || 'Normal'}
+          </Text>
+        </View>
+
+        <View style={styles.requestFooter}>
+          <Text style={styles.createdDate}>
+            {item.created_at || 'N/A'}
+          </Text>
+          <TouchableOpacity
+            style={styles.viewBtn}
+            onPress={() => navigation.navigate('RequestDetail', { requestId: item.id })}
+          >
+            <LinearGradient colors={['#2C3E50', '#4ECDC4']} style={styles.viewBtnGradient}>
+              <Text style={styles.viewBtnText}>View Details</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+      </LinearGradient>
+    </Animatable.View>
+  );
+
+  const renderEmptyState = () => (
+    <Animatable.View animation="fadeIn" style={styles.emptyState}>
+      <Icon name="inbox" size={60} color="#ccc" />
+      <Text style={styles.emptyStateTitle}>No Requests Found</Text>
+      <Text style={styles.emptyStateText}>
+        {filter === 'all' 
+          ? 'No requests available for your assigned projects' 
+          : `No ${filter} requests`}
+      </Text>
+      <TouchableOpacity style={styles.refreshButton} onPress={fetchRequests}>
+        <LinearGradient colors={['#2C3E50', '#4ECDC4']} style={styles.refreshButtonGradient}>
+          <Text style={styles.refreshButtonText}>Refresh</Text>
+        </LinearGradient>
+      </TouchableOpacity>
+    </Animatable.View>
+  );
+
+  const renderHeader = () => (
+    <>
+      <LinearGradient colors={['#2C3E50', '#4ECDC4']} style={styles.header}>
+        <Text style={styles.welcomeText}>Welcome, {user?.name || 'Assigner'}</Text>
+        <Text style={styles.roleText}>Manage and track all your project requests</Text>
+      </LinearGradient>
+
+      {error && (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={fetchRequests}>
+            <Text style={styles.retryText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      <View style={styles.statsContainer}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View style={styles.statCard}>
+            <Text style={[styles.statValue, { color: statColors.total }]}>{stats.total}</Text>
+            <Text style={styles.statLabel}>Total Requests</Text>
+          </View>
+          
+          <View style={styles.statCard}>
+            <Text style={[styles.statValue, { color: statColors.pending }]}>{stats.pending}</Text>
+            <Text style={styles.statLabel}>Pending</Text>
+          </View>
+          
+          <View style={styles.statCard}>
+            <Text style={[styles.statValue, { color: statColors.inprogress }]}>{stats.in_progress}</Text>
+            <Text style={styles.statLabel}>In Progress</Text>
+          </View>
+          
+          <View style={styles.statCard}>
+            <Text style={[styles.statValue, { color: statColors.completed }]}>{stats.completed}</Text>
+            <Text style={styles.statLabel}>Completed</Text>
+          </View>
+        </ScrollView>
+      </View>
+
+      <View style={styles.searchFilterContainer}>
+        <View style={styles.searchWrapper}>
+          <Icon name="search" size={16} color="#4ECDC4" style={styles.searchIcon} />
+          <TextInput
+            placeholder="Search by user, project, or issue..."
+            value={search}
+            onChangeText={setSearch}
+            style={styles.searchInput}
+          />
+        </View>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          {['all', 'pending', 'inprogress', 'completed'].map(f => (
+            <TouchableOpacity
+              key={f}
+              onPress={() => setFilter(f)}
+              style={[styles.filterBtn, filter === f && styles.filterBtnActive]}
+            >
+              <Text style={[styles.filterText, filter === f && styles.filterTextActive]}>
+                {f === 'all' ? 'All' : f === 'inprogress' ? 'In Progress' : f.charAt(0).toUpperCase() + f.slice(1)}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+    </>
+  );
+
   const navigationView = (
     <View style={styles.drawerContainer}>
-      <LinearGradient
-        colors={['#2C3E50', '#4ECDC4']}
-        style={styles.drawerHeader}
-      >
+      <LinearGradient colors={['#2C3E50', '#4ECDC4']} style={styles.drawerHeader}>
         <View style={styles.drawerHeaderContent}>
           <View style={styles.userAvatar}>
             <Icon name="user" size={40} color="#fff" />
@@ -132,187 +298,7 @@ const AssignerDashboardScreen = () => {
     </View>
   );
 
-  const filteredRequests = requests.filter(item => {
-    const statusMatch =
-      filter === 'all' || item.status?.toLowerCase() === filter;
-    const searchMatch =
-      (item.user?.name?.toLowerCase() || '').includes(search.toLowerCase()) ||
-      (item.project?.name?.toLowerCase() || '').includes(
-        search.toLowerCase(),
-      ) ||
-      (item.request_details?.toLowerCase() || '').includes(
-        search.toLowerCase(),
-      );
-    return statusMatch && searchMatch;
-  });
-
-  const stats = {
-    total: requests.length,
-    pending: requests.filter(r => r.status?.toLowerCase() === 'pending').length,
-    inprogress: requests.filter(r => r.status?.toLowerCase() === 'inprogress')
-      .length,
-    completed: requests.filter(r => r.status?.toLowerCase() === 'completed')
-      .length,
-  };
-
-  const renderRequest = ({ item, index }) => (
-    <Animatable.View
-      animation="fadeInUp"
-      duration={600}
-      delay={index * 100}
-      style={styles.requestCard}
-    >
-      <LinearGradient
-        colors={['#ffffff', '#f8f9fa', '#ffffff']}
-        style={styles.cardGradient}
-      >
-        <View style={styles.requestHeader}>
-          <Text style={styles.projectName}>
-            {item.project?.name || 'Unknown Project'}
-          </Text>
-          <Text style={styles.userName}>
-            {item.user?.name || 'Unknown User'}
-          </Text>
-        </View>
-        <Text style={styles.issue} numberOfLines={2}>
-          {item.request_details || 'No details'}
-        </Text>
-
-        <View style={styles.badgesRow}>
-          <Text
-            style={[
-              styles.statusBadge,
-              statusColors[item.status?.toLowerCase()],
-            ]}
-          >
-            {item.status || 'unknown'}
-          </Text>
-          {item.pricing ? (
-            <Text style={styles.pricingBadge}>₹{item.pricing}</Text>
-          ) : null}
-        </View>
-
-        <TouchableOpacity
-          style={styles.viewBtn}
-          onPress={() =>
-            navigation.navigate('RequestDetail', { requestId: item.id })
-          }
-        >
-          <LinearGradient
-            colors={['#2C3E50', '#4ECDC4']}
-            style={styles.viewBtnGradient}
-          >
-            <Text style={styles.viewBtnText}>View Details</Text>
-          </LinearGradient>
-        </TouchableOpacity>
-      </LinearGradient>
-    </Animatable.View>
-  );
-
-  const EmptyState = () => (
-    <Animatable.View animation="fadeIn" style={styles.emptyState}>
-      <Icon name="inbox" size={60} color="#ccc" />
-      <Text style={styles.emptyStateTitle}>No Requests Found</Text>
-      <Text style={styles.emptyStateText}>
-        {filter === 'all' ? 'No requests available' : `No ${filter} requests`}
-      </Text>
-      <TouchableOpacity style={styles.refreshButton} onPress={fetchRequests}>
-        <LinearGradient
-          colors={['#2C3E50', '#4ECDC4']}
-          style={styles.refreshButtonGradient}
-        >
-          <Text style={styles.refreshButtonText}>Refresh</Text>
-        </LinearGradient>
-      </TouchableOpacity>
-    </Animatable.View>
-  );
-
-  // ONLY CHANGE: Render all content in the FlatList instead of nesting
-  const renderContent = () => (
-    <>
-      <LinearGradient colors={['#2C3E50', '#4ECDC4']} style={styles.header}>
-        <Text style={styles.welcomeText}>
-          Welcome, {user?.name || 'Assigner'}
-        </Text>
-        <Text style={styles.roleText}>Manage Change Requests</Text>
-      </LinearGradient>
-
-      {error && (
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity
-            style={styles.retryButton}
-            onPress={fetchRequests}
-          >
-            <Text style={styles.retryText}>Retry</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      <View style={styles.statsContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {Object.entries(stats).map(([key, value]) => (
-            <View key={key} style={styles.statCard}>
-              <Text style={[styles.statValue, { color: statColors[key] }]}>
-                {value}
-              </Text>
-              <Text style={styles.statLabel}>
-                {key === 'total'
-                  ? 'Total'
-                  : key === 'inprogress'
-                  ? 'In Progress'
-                  : key.charAt(0).toUpperCase() + key.slice(1)}
-              </Text>
-            </View>
-          ))}
-        </ScrollView>
-      </View>
-
-      <View style={styles.searchFilterContainer}>
-        <View style={styles.searchWrapper}>
-          <Icon
-            name="search"
-            size={16}
-            color="#4ECDC4"
-            style={styles.searchIcon}
-          />
-          <TextInput
-            placeholder="Search requests..."
-            value={search}
-            onChangeText={setSearch}
-            style={styles.searchInput}
-          />
-        </View>
-
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {['all', 'pending', 'inprogress', 'completed'].map(f => (
-            <TouchableOpacity
-              key={f}
-              onPress={() => setFilter(f)}
-              style={[
-                styles.filterBtn,
-                filter === f && styles.filterBtnActive,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.filterText,
-                  filter === f && styles.filterTextActive,
-                ]}
-              >
-                {f === 'all'
-                  ? 'All'
-                  : f === 'inprogress'
-                  ? 'In Progress'
-                  : f.charAt(0).toUpperCase() + f.slice(1)}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-    </>
-  );
-
+  // Loading state
   if (loading && !refreshing) {
     return (
       <View style={styles.loadingContainer}>
@@ -322,6 +308,7 @@ const AssignerDashboardScreen = () => {
     );
   }
 
+  // Main render
   return (
     <DrawerLayoutAndroid
       ref={drawerRef}
@@ -337,24 +324,20 @@ const AssignerDashboardScreen = () => {
             <Icon name="bars" size={24} color="#fff" />
           </TouchableOpacity>
           <Text style={styles.navbarTitle}>Assigner Dashboard</Text>
-          <View style={styles.navbarRight} />
-        <View style={styles.navbarRight}>
-          <TouchableOpacity style={styles.navbarIcon}>
-            <Icon name="user" size={20} color="#fff" />
-              </TouchableOpacity>
-                </View>
+          <View style={styles.navbarRight}>
+            <TouchableOpacity style={styles.navbarIcon}>
+              <Icon name="user" size={20} color="#fff" />
+            </TouchableOpacity>
+          </View>
         </View>
 
-        {/* ONLY CHANGE: Use FlatList instead of ScrollView + FlatList nesting */}
         <FlatList
           data={filteredRequests}
           keyExtractor={item => item.id.toString()}
           renderItem={renderRequest}
-          ListEmptyComponent={EmptyState}
-          ListHeaderComponent={renderContent}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
+          ListEmptyComponent={renderEmptyState}
+          ListHeaderComponent={renderHeader}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
         />
@@ -363,17 +346,24 @@ const AssignerDashboardScreen = () => {
   );
 };
 
-// Colors & Styles (same as before, just cleaned up)
 const statColors = {
   total: '#2C3E50',
   pending: '#F59E0B',
   inprogress: '#3B82F6',
   completed: '#10B981',
 };
+
 const statusColors = {
   pending: { backgroundColor: '#FEF3C7', color: '#92400E' },
   inprogress: { backgroundColor: '#DBEAFE', color: '#1E40AF' },
   completed: { backgroundColor: '#D1FAE5', color: '#065F46' },
+};
+
+const priorityColors = {
+  high: { backgroundColor: '#FEE2E2', color: '#991B1B' },
+  normal: { backgroundColor: '#E0F2FE', color: '#075985' },
+  medium: { backgroundColor: '#FEF3C7', color: '#92400E' },
+  low: { backgroundColor: '#F3F4F6', color: '#6B7280' },
 };
 
 const styles = StyleSheet.create({
@@ -392,12 +382,6 @@ const styles = StyleSheet.create({
     color: '#2C3E50',
     fontSize: 16,
   },
-  scrollContent: {
-    flexGrow: 1,
-    paddingTop: 0,
-  },
-  
-  // Top Navbar - Same as Admin Dashboard
   navbar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -417,12 +401,8 @@ const styles = StyleSheet.create({
   menuButton: {
     padding: 8,
   },
-  navbarCenter: {
-    flex: 1,
-    alignItems: 'center',
-  },
   navbarTitle: {
-    paddingLeft:40,
+    paddingLeft: 40,
     fontSize: 18,
     fontWeight: 'bold',
     color: '#fff',
@@ -434,8 +414,6 @@ const styles = StyleSheet.create({
   navbarIcon: {
     padding: 8,
   },
-
-  // Header - Matching Admin Dashboard
   header: {
     paddingHorizontal: 20,
     paddingTop: 20,
@@ -443,15 +421,7 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
     marginTop: 0,
-    marginBottom:9,
-  },
-  headerContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  headerText: {
-    flex: 1,
+    marginBottom: 9,
   },
   welcomeText: {
     fontSize: 24,
@@ -464,8 +434,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     opacity: 0.9,
   },
-  
-  // Drawer Styles - Same as Admin Dashboard
   drawerContainer: {
     flex: 1,
     backgroundColor: '#fff',
@@ -516,11 +484,6 @@ const styles = StyleSheet.create({
     marginLeft: 15,
     fontWeight: '500',
   },
-  drawerDivider: {
-    height: 1,
-    backgroundColor: '#ecf0f1',
-    marginVertical: 15,
-  },
   logoutDrawerItem: {
     marginTop: 'auto',
     marginBottom: 20,
@@ -528,15 +491,9 @@ const styles = StyleSheet.create({
   logoutText: {
     color: '#e74c3c',
   },
-  
-  // Rest of the existing styles remain the same
   statsContainer: {
     padding: 20,
     marginTop: -13,
-  },
-  statsScrollContent: {
-    paddingHorizontal: 8,
-    gap: 12,
   },
   statCard: {
     width: (width - 50) / 2,
@@ -549,14 +506,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 5,
-    marginBottom:7,
-    marginHorizontal:5,
-  },
-  statCardGradient: {
-    paddingVertical: 25,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
+    marginBottom: 7,
+    marginHorizontal: 5,
   },
   statValue: { 
     fontSize: 24,
@@ -569,12 +520,10 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
   },
-  
-  // Search and Filter Section
   searchFilterContainer: {
     padding: 20,
     paddingTop: 1,
-    marginTop:-10,
+    marginTop: -10,
   },
   searchWrapper: {
     flexDirection: 'row',
@@ -591,7 +540,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 3,
     elevation: 2,
-    
   },
   searchIcon: {
     marginRight: 10,
@@ -600,15 +548,6 @@ const styles = StyleSheet.create({
     flex: 1,
     color: '#333',
     fontSize: 16,
-  },
-  filterScroll: {
-    marginBottom: 8,
-  },
-  filterContainer: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingHorizontal: 4,
-    marginBottom:9,
   },
   filterBtn: { 
     paddingHorizontal: 20,
@@ -624,7 +563,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
-    marginBottom:2,
+    marginBottom: 2,
+    marginRight: 8,
   },
   filterBtnActive: { 
     backgroundColor: '#4ECDC4', 
@@ -638,25 +578,12 @@ const styles = StyleSheet.create({
   filterTextActive: {
     color: 'white',
   },
-  
-  // Content Area
-  contentContainer: {
-    flex: 1,
-    padding: 20,
-    paddingTop: 0,
-  },
   listContent: {
     paddingBottom: 20,
     flexGrow: 1,
   },
-  emptyListContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-  },
-  
-  // Request Cards
   requestCard: {
-    marginHorizontal:16,
+    marginHorizontal: 16,
     borderRadius: 16,
     overflow: 'hidden',
     marginBottom: 16,
@@ -712,9 +639,27 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     fontWeight: '600',
     fontSize: 12,
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    overflow: 'hidden',
+  },
+  deptHeadBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    fontWeight: '600',
+    fontSize: 12,
+    backgroundColor: '#F3F0FF',
+    color: '#7C3AED',
+  },
+  requestFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  createdDate: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500',
   },
   viewBtn: {
     borderRadius: 12,
@@ -728,14 +673,13 @@ const styles = StyleSheet.create({
   viewBtnGradient: {
     padding: 12,
     alignItems: 'center',
+    paddingHorizontal: 20,
   },
   viewBtnText: {
     color: 'white',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
   },
-  
-  // Empty State
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -747,6 +691,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#2C3E50',
     marginBottom: 8,
+    marginTop: 15,
     textAlign: 'center',
   },
   emptyStateText: {
@@ -775,8 +720,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 16,
   },
-  
-  // Error State
   errorContainer: { 
     backgroundColor: '#ffffff',
     borderRadius: 12,
@@ -798,12 +741,9 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   retryButton: {
+    backgroundColor: '#DC2626',
     borderRadius: 8,
-    overflow: 'hidden',
-  },
-  retryButtonGradient: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingVertical: 10,
     alignItems: 'center',
   },
   retryText: { 

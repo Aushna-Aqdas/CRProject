@@ -78,6 +78,18 @@ android {
     compileSdk rootProject.ext.compileSdkVersion
 
     namespace "com.crproject"
+
+// ADD THIS BLOCK
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    
+    // ADD THIS BLOCK FOR KOTLIN
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+    
     defaultConfig {
         applicationId "com.crproject"
         minSdkVersion rootProject.ext.minSdkVersion

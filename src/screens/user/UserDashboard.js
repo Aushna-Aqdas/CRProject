@@ -14,8 +14,8 @@ import {
   Animated,
   PanResponder,
   Platform,
-  Linking,
   KeyboardAvoidingView,
+  PermissionsAndroid,
 } from 'react-native';
 import { useAuth } from '../../hooks/redux';
 import { useNavigation } from '@react-navigation/native';
@@ -27,9 +27,11 @@ import apiService from '../../services/apiService';
 import Footer from '../../components/Footer';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import DocumentPicker from 'react-native-document-picker';
-import { requestMultiple, PERMISSIONS, RESULTS } from 'react-native-permissions';
+import AudioRecorderPlayer from 'react-native-audio-recorder-player';
+import RNFS from 'react-native-fs';
 
 const { width } = Dimensions.get('window');
+const audioRecorderPlayer = new AudioRecorderPlayer();
 
 const UserDashboard = () => {
   const { user: authUser, logout } = useAuth();
@@ -60,14 +62,13 @@ const UserDashboard = () => {
   // Attachments
   const [attachments, setAttachments] = useState([]);
 
-  // Audio simulation states
+  // Real Audio Recording states
   const [voiceNote, setVoiceNote] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
-  const [recordingDuration, setRecordingDuration] = useState('00:00');
-
-  // Timer refs
-  const timerRef = useRef(null);
-  const startTimeRef = useRef(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [recordTime, setRecordTime] = useState('00:00');
+  const [playTime, setPlayTime] = useState('00:00');
+  const [audioPath, setAudioPath] = useState('');
 
   // Loading & UI
   const [loading, setLoading] = useState(true);
@@ -75,43 +76,196 @@ const UserDashboard = () => {
   const [loadingSubQueries, setLoadingSubQueries] = useState(false);
   const [notification, setNotification] = useState({ message: '', type: '' });
   const [submitLoading, setSubmitLoading] = useState(false);
-
   const showNotification = (message, type = 'error') => {
     setNotification({ message, type });
     setTimeout(() => setNotification({ message: '', type: '' }), 4000);
   };
+  
+
+  // ====================== AUDIO PERMISSIONS ======================
+
+  const requestAudioPermission = async () => {
+    if (Platform.OS === 'android') {
+      try {
+        const grants = await PermissionsAndroid.requestMultiple([
+          PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+          PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
+          PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
+        ]);
+
+        if (grants['android.permission.RECORD_AUDIO'] === PermissionsAndroid.RESULTS.GRANTED) {
+          return true;
+        } else {
+          Alert.alert('Permission Denied', 'Audio recording permission is required');
+          return false;
+        }
+      } catch (err) {
+        console.warn('Permission error:', err);
+        return false;
+      }
+    }
+    return true;
+  };
+
+  // ====================== AUDIO RECORDING FUNCTIONS ======================
+
+ const onStartRecord = async () => {
+    const hasPermission = await requestAudioPermission();
+    if (!hasPermission) {
+      showNotification('Audio permission not granted', 'error');
+      return;
+    }
+
+    try {
+      const path = Platform.select({
+        ios: `${RNFS.DocumentDirectoryPath}/audio_${Date.now()}.m4a`,
+        android: `${RNFS.CachesDirectoryPath}/audio_${Date.now()}.mp3`,
+      });
+
+      await audioRecorderPlayer.startRecorder(path);
+      
+      audioRecorderPlayer.addRecordBackListener((e) => {
+        // Format time properly: convert milliseconds to MM:SS
+        const minutes = Math.floor(e.currentPosition / 60000);
+        const seconds = Math.floor((e.currentPosition % 60000) / 1000);
+        const formattedTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        setRecordTime(formattedTime);
+      });
+
+      setIsRecording(true);
+      setAudioPath(path);
+      console.log('Recording started at:', path);
+    } catch (error) {
+      console.error('Error starting recording:', error);
+      showNotification('Failed to start recording', 'error');
+    }
+  };
+
+  const onStopRecord = async () => {
+    try {
+      const result = await audioRecorderPlayer.stopRecorder();
+      audioRecorderPlayer.removeRecordBackListener();
+      
+      setIsRecording(false);
+      
+      const base64Audio = await RNFS.readFile(result, 'base64');
+      
+      const voiceNoteData = {
+        uri: result,
+        base64: `data:audio/${Platform.OS === 'ios' ? 'm4a' : 'mp3'};base64,${base64Audio}`,
+        name: `voice_note_${Date.now()}.${Platform.OS === 'ios' ? 'm4a' : 'mp3'}`,
+        type: `audio/${Platform.OS === 'ios' ? 'm4a' : 'mpeg'}`,
+        duration: recordTime,
+      };
+      
+      setVoiceNote(voiceNoteData);
+      setRecordTime('00:00');
+      console.log('Recording stopped:', result);
+      showNotification('Voice note saved successfully', 'success');
+    } catch (error) {
+      console.error('Error stopping recording:', error);
+      showNotification('Failed to save recording', 'error');
+    }
+  };
+
+  const onStartPlay = async () => {
+    if (!voiceNote?.uri) {
+      showNotification('No voice note to play', 'error');
+      return;
+    }
+
+    try {
+      await audioRecorderPlayer.startPlayer(voiceNote.uri);
+      
+      audioRecorderPlayer.addPlayBackListener((e) => {
+        // Format play time properly: convert milliseconds to MM:SS
+        const minutes = Math.floor(e.currentPosition / 60000);
+        const seconds = Math.floor((e.currentPosition % 60000) / 1000);
+        const formattedTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        setPlayTime(formattedTime);
+        
+        if (e.currentPosition === e.duration) {
+          onStopPlay();
+        }
+      });
+      
+      setIsPlaying(true);
+    } catch (error) {
+      console.error('Error playing audio:', error);
+      showNotification('Failed to play audio', 'error');
+    }
+  };
+
+  const onStopPlay = async () => {
+    try {
+      await audioRecorderPlayer.stopPlayer();
+      audioRecorderPlayer.removePlayBackListener();
+      setIsPlaying(false);
+      setPlayTime('00:00');
+    } catch (error) {
+      console.error('Error stopping playback:', error);
+    }
+  };
+
+  const removeVoiceNote = async () => {
+    try {
+      if (isPlaying) {
+        await onStopPlay();
+      }
+
+      if (voiceNote?.uri) {
+        const fileExists = await RNFS.exists(voiceNote.uri);
+        if (fileExists) {
+          await RNFS.unlink(voiceNote.uri);
+        }
+      }
+
+      setVoiceNote(null);
+      setAudioPath('');
+      setPlayTime('00:00');
+      showNotification('Voice note removed', 'success');
+    } catch (error) {
+      console.error('Error removing voice note:', error);
+      setVoiceNote(null);
+    }
+  };
+
+  // ====================== CLEANUP ON UNMOUNT ======================
+
+  useEffect(() => {
+    return () => {
+      audioRecorderPlayer.stopRecorder();
+      audioRecorderPlayer.stopPlayer();
+      audioRecorderPlayer.removeRecordBackListener();
+      audioRecorderPlayer.removePlayBackListener();
+    };
+  }, []);
 
   // ====================== FETCH DASHBOARD DATA ======================
 
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-
       const response = await apiService.user.getDashboard();
 
       if (response.data.success) {
-        const data = response.data.data; // ← Critical: nested .data.data
+        const data = response.data.data;
 
-        // User info
         if (data.user) {
           setApiUser(data.user);
           setSubmittedBy(data.user.name || '');
         }
 
-        // Clean projects: remove duplicates caused by pivot table
         const uniqueProjects = Array.from(
           new Map((data.projects || []).map(p => [p.id, { id: p.id, name: p.name }])).values()
         );
         setProjects(uniqueProjects);
 
-        // Categories come as "queries" in your API
         setServices(data.queries || []);
-
-        // Recent requests
         setRecentRequests(data.recent_requests || []);
-        // Add this after setting recentRequests
-const pending = data.recent_requests?.filter(r => r.status.toLowerCase() === 'pending').length || 0;
-setPendingCount(pending);
+        
+        const pending = data.recent_requests?.filter(r => r.status.toLowerCase() === 'pending').length || 0;
+        setPendingCount(pending);
       } else {
         showNotification(response.data.message || 'Failed to load dashboard', 'error');
       }
@@ -124,35 +278,31 @@ setPendingCount(pending);
     }
   };
 
-  // ====================== FETCH SUB-QUERIES ======================
-
   const fetchSubQueries = async (serviceId) => {
-  if (!serviceId) {
-    setSubQueries([]);
-    setSelectedSubQuery('');
-    return;
-  }
-
-  setLoadingSubQueries(true);
-  try {
-    const response = await apiService.user.getSubQueries(serviceId);
-    
-    if (response.data.success) {
-      const subQueriesData = response.data.data || [];
-      setSubQueries(subQueriesData.map(sq => ({ id: sq.id, name: sq.name })));
-    } else {
+    if (!serviceId) {
       setSubQueries([]);
+      setSelectedSubQuery('');
+      return;
     }
-  } catch (error) {
-    console.error('Error fetching sub-queries:', error);
-    setSubQueries([]);
-    showNotification('Failed to load sub-categories', 'error');
-  } finally {
-    setLoadingSubQueries(false);
-  }
-};
 
-  // ====================== EFFECTS ======================
+    setLoadingSubQueries(true);
+    try {
+      const response = await apiService.user.getSubQueries(serviceId);
+      
+      if (response.data.success) {
+        const subQueriesData = response.data.data || [];
+        setSubQueries(subQueriesData.map(sq => ({ id: sq.id, name: sq.name })));
+      } else {
+        setSubQueries([]);
+      }
+    } catch (error) {
+      console.error('Error fetching sub-queries:', error);
+      setSubQueries([]);
+      showNotification('Failed to load sub-categories', 'error');
+    } finally {
+      setLoadingSubQueries(false);
+    }
+  };
 
   useEffect(() => {
     fetchDashboardData();
@@ -167,61 +317,10 @@ setPendingCount(pending);
     }
   }, [selectedService]);
 
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, []);
-
   const onRefresh = () => {
     setRefreshing(true);
     fetchDashboardData();
   };
-
-  // ====================== AUDIO SIMULATION ======================
-
-  const requestPermissions = async () => {
-    return true; // Replace with real permissions when ready
-  };
-
-  const startRecording = async () => {
-    const hasPermission = await requestPermissions();
-    if (!hasPermission) return;
-
-    setIsRecording(true);
-    setVoiceNote(null);
-    startTimeRef.current = Date.now();
-
-    timerRef.current = setInterval(() => {
-      const elapsed = Date.now() - startTimeRef.current;
-      const mins = Math.floor(elapsed / 60000);
-      const secs = Math.floor((elapsed % 60000) / 1000);
-      setRecordingDuration(`${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`);
-    }, 1000);
-
-    Alert.alert('Voice Note Demo', 'Simulation started. Tap Stop when done.', [{ text: 'OK' }]);
-  };
-
-  const stopRecording = () => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    setIsRecording(false);
-    setRecordingDuration('00:00');
-
-    const simulated = {
-      uri: 'simulated-audio-path',
-      base64: 'data:audio/mp3;base64,simulated-demo-data',
-      name: 'voice_note.mp3',
-    };
-    setVoiceNote(simulated);
-    Alert.alert('Voice Note Saved', 'Simulation completed.');
-  };
-
-  const playVoiceNote = () => {
-    if (!voiceNote) return Alert.alert('No Recording', 'Record first');
-    Alert.alert('Playback', 'This is a simulation — real audio would play here.');
-  };
-
-  const removeVoiceNote = () => setVoiceNote(null);
 
   // ====================== FORM SUBMISSION ======================
 
@@ -244,7 +343,9 @@ setPendingCount(pending);
     formData.append('submitted_by_name', submittedBy.trim());
     if (priority === 'high') formData.append('priority_reason', priorityReason.trim());
 
-    if (voiceNote?.base64) formData.append('voice_note', voiceNote.base64);
+    if (voiceNote?.base64) {
+      formData.append('voice_note', voiceNote.base64);
+    }
 
     attachments.forEach((file, i) => {
       formData.append(`attachments[${i}]`, {
@@ -273,7 +374,7 @@ setPendingCount(pending);
     }
   };
 
-  const resetForm = () => {
+  const resetForm = async () => {
     setSelectedProject('');
     setSelectedService('');
     setSelectedSubQuery('');
@@ -281,7 +382,19 @@ setPendingCount(pending);
     setPriorityReason('');
     setRequestDetails('');
     setAttachments([]);
+    
+    if (voiceNote?.uri) {
+      try {
+        const fileExists = await RNFS.exists(voiceNote.uri);
+        if (fileExists) {
+          await RNFS.unlink(voiceNote.uri);
+        }
+      } catch (error) {
+        console.log('Error deleting voice note file:', error);
+      }
+    }
     setVoiceNote(null);
+    setAudioPath('');
   };
 
   // ====================== MEDIA & DOCUMENTS ======================
@@ -312,19 +425,18 @@ setPendingCount(pending);
     }
   };
 
-    const pickDocument = async () => {
+  const pickDocument = async () => {
     try {
       const results = await DocumentPicker.pick({
         type: [DocumentPicker.types.allFiles],
-        allowMultiSelection: true,  // This enables picking multiple files
+        allowMultiSelection: true,
       });
 
-      // results is an array of file objects
       const newFiles = results.map(file => ({
         uri: file.uri,
         type: file.type || 'application/octet-stream',
         name: file.name,
-        size: file.size, // Optional: useful for display
+        size: file.size,
       }));
 
       setAttachments(prev => [...prev, ...newFiles]);
@@ -332,7 +444,6 @@ setPendingCount(pending);
     } catch (err) {
       if (DocumentPicker.isCancel(err)) {
         console.log('User cancelled document picker');
-        // User cancelled — do nothing
       } else {
         console.error('Document Picker Error:', err);
         Alert.alert('Error', 'Could not pick document. Please try again.');
@@ -445,285 +556,294 @@ setPendingCount(pending);
           <Text style={styles.navbarTitle}>User Dashboard</Text>
           <View style={{ width: 40 }} />
         </View>
-<KeyboardAvoidingView
+
+        <KeyboardAvoidingView
           style={{ flex: 1 }}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
         >
-        <ScrollView
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          contentContainerStyle={styles.scrollContent}
-        >
-          {notification.message && (
-            <Animatable.View
-              animation="fadeInDown"
-              style={[styles.notification, notification.type === 'error' ? styles.error : styles.success]}
-            >
-              <Text style={styles.notificationText}>{notification.message}</Text>
-            </Animatable.View>
-          )}
+          <ScrollView
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+            contentContainerStyle={styles.scrollContent}
+          >
+            {notification.message && (
+              <Animatable.View
+                animation="fadeInDown"
+                style={[styles.notification, notification.type === 'error' ? styles.error : styles.success]}
+              >
+                <Text style={styles.notificationText}>{notification.message}</Text>
+              </Animatable.View>
+            )}
 
-          <LinearGradient colors={['#2C3E50', '#4ECDC4']} style={styles.header}>
-            <Text style={styles.welcomeText}>
-              Welcome, {apiUser?.name || authUser?.name || 'User'}
-            </Text>
-            <Text style={styles.roleText}>Project Enhancement Portal</Text>
-          </LinearGradient>
+            <LinearGradient colors={['#2C3E50', '#4ECDC4']} style={styles.header}>
+              <Text style={styles.welcomeText}>
+                Welcome, {apiUser?.name || authUser?.name || 'User'}
+              </Text>
+              <Text style={styles.roleText}>Project Enhancement Portal</Text>
+            </LinearGradient>
 
-          <Animatable.View animation="fadeInUp" style={styles.requestForm}>
-            <LinearGradient colors={['#fff', '#f8f9fa']} style={styles.cardGradient}>
-              <Text style={styles.formTitle}>Submit New Request</Text>
-              {/* Project */}
-              <View style={styles.formSection}>
-                <Text style={styles.label}>Select Project *</Text>
-                <View style={styles.inputWrapper}>
-                  <Icon name="folder" size={20} color="#4ECDC4" style={styles.inputIcon} />
-                  <Dropdown
-                    style={styles.dropdown}
-                    data={projects.map(p => ({ label: p.name, value: p.id }))}
-                    search
-                    labelField="label"
-                    valueField="value"
-                    placeholder={projects.length === 0 ? "No projects available" : "Select Project"}
-                    searchPlaceholder="Search..."
-                    value={selectedProject}
-                    onChange={item => setSelectedProject(item.value)}
-                  />
+            <Animatable.View animation="fadeInUp" style={styles.requestForm}>
+              <LinearGradient colors={['#fff', '#f8f9fa']} style={styles.cardGradient}>
+                <Text style={styles.formTitle}>Submit New Request</Text>
+
+                <View style={styles.formSection}>
+                  <Text style={styles.label}>Select Project *</Text>
+                  <View style={styles.inputWrapper}>
+                    <Icon name="folder" size={20} color="#4ECDC4" style={styles.inputIcon} />
+                    <Dropdown
+                      style={styles.dropdown}
+                      data={projects.map(p => ({ label: p.name, value: p.id }))}
+                      search
+                      labelField="label"
+                      valueField="value"
+                      placeholder={projects.length === 0 ? "No projects available" : "Select Project"}
+                      searchPlaceholder="Search..."
+                      value={selectedProject}
+                      onChange={item => setSelectedProject(item.value)}
+                    />
+                  </View>
                 </View>
-              </View>
 
-              {/* Category */}
-              <View style={styles.formSection}>
-                <Text style={styles.label}>Request Category *</Text>
-                <View style={styles.inputWrapper}>
-                  <Icon name="cogs" size={20} color="#4ECDC4" style={styles.inputIcon} />
-                  <Dropdown
-                    style={styles.dropdown}
-                    data={services.map(s => ({ label: s.name, value: s.id }))}
-                    search
-                    labelField="label"
-                    valueField="value"
-                    placeholder={services.length === 0 ? "No categories available" : "Select Category"}
-                    searchPlaceholder="Search..."
-                    value={selectedService}
-                    onChange={item => {
-                      setSelectedService(item.value);
-                      setSelectedSubQuery('');
-                    }}
-                  />
-                </View>
-              </View>
-
-              {/* Sub Category */}
-              <View style={styles.formSection}>
-                <Text style={styles.label}>Sub Category (Optional)</Text>
-                <View style={styles.inputWrapper}>
-                  <Icon name="list-alt" size={20} color="#4ECDC4" style={styles.inputIcon} />
-                  <Dropdown
-                    style={styles.dropdown}
-                    data={subQueries.map(sq => ({ label: sq.name, value: sq.id }))}
-                    labelField="label"
-                    valueField="value"
-                    placeholder={
-                      loadingSubQueries ? "Loading..." :
-                      !selectedService ? "Select category first" :
-                      subQueries.length === 0 ? "No sub-categories" : "Select Sub Category"
-                    }
-                    value={selectedSubQuery}
-                    onChange={item => setSelectedSubQuery(item.value)}
-                    disabled={loadingSubQueries || !selectedService || subQueries.length === 0}
-                  />
-                  {loadingSubQueries && <ActivityIndicator size="small" color="#4ECDC4" style={styles.loadingIndicator} />}
-                </View>
-              </View>
-
-              {/* Priority */}
-              <View style={styles.formSection}>
-                <Text style={styles.label}>Priority Level *</Text>
-                <View style={styles.priorityGroup}>
-                  {[{ value: 'high', label: 'High', color: '#ff6b6b' },
-                    { value: 'normal', label: 'Normal', color: '#4ECDC4' },
-                    { value: 'low', label: 'Low', color: '#ffd166' }].map(item => (
-                    <TouchableOpacity
-                      key={item.value}
-                      style={[styles.priorityOption, priority === item.value && { backgroundColor: item.color, borderColor: item.color }]}
-                      onPress={() => {
-                        setPriority(item.value);
-                        if (item.value !== 'high') setPriorityReason('');
+                <View style={styles.formSection}>
+                  <Text style={styles.label}>Request Category *</Text>
+                  <View style={styles.inputWrapper}>
+                    <Icon name="cogs" size={20} color="#4ECDC4" style={styles.inputIcon} />
+                    <Dropdown
+                      style={styles.dropdown}
+                      data={services.map(s => ({ label: s.name, value: s.id }))}
+                      search
+                      labelField="label"
+                      valueField="value"
+                      placeholder={services.length === 0 ? "No categories available" : "Select Category"}
+                      searchPlaceholder="Search..."
+                      value={selectedService}
+                      onChange={item => {
+                        setSelectedService(item.value);
+                        setSelectedSubQuery('');
                       }}
-                    >
-                      <Text style={[styles.priorityText, priority === item.value && styles.priorityTextSelected]}>
-                        {item.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+                    />
+                  </View>
                 </View>
 
-                {priority === 'high' && (
-                  <Animatable.View animation="fadeIn" style={styles.highPriorityReasonContainer}>
-                    <Text style={styles.label}>Reason for High Priority *</Text>
-                    <View style={styles.textareaWrapper}>
-                      <Icon name="exclamation-triangle" size={20} color="#ff6b6b" style={styles.textareaIcon} />
-                      <TextInput
-                        style={styles.textarea}
-                        multiline
-                        placeholder="Explain urgency..."
-                        placeholderTextColor="#999"
-                        value={priorityReason}
-                        onChangeText={setPriorityReason}
-                      />
-                    </View>
-                  </Animatable.View>
-                )}
-              </View>
-
-              {/* Details */}
-              <View style={styles.formSection}>
-                <Text style={styles.label}>Request Details *</Text>
-                <View style={styles.textareaWrapper}>
-                  <Icon name="edit" size={20} color="#4ECDC4" style={styles.textareaIcon} />
-                  <TextInput
-                    style={styles.textarea}
-                    multiline
-                    numberOfLines={6}
-                    placeholder="Describe your request..."
-                    placeholderTextColor="#999"
-                    value={requestDetails}
-                    onChangeText={setRequestDetails}
-                  />
-                </View>
-              </View>
-
-              {/* Submitted By */}
-              <View style={styles.formSection}>
-                <Text style={styles.label}>Submitted By *</Text>
-                <View style={styles.inputWrapper}>
-                  <Icon name="user" size={20} color="#4ECDC4" style={styles.inputIcon} />
-                  <TextInput
-                    style={styles.textInput}
-                    value={submittedBy}
-                    onChangeText={setSubmittedBy}   // Allows user to type or edit name
-                    placeholder="Enter your full name"
-                    placeholderTextColor="#999"
-                  />
-                </View>
-              </View>
-              {/* Attachments Section */}
-              <View style={styles.formSection}>
-                <Text style={styles.label}>Attachments (Optional)</Text>
-                <Text style={styles.helperText}>Add images, documents, or screenshots</Text>
-                <View style={styles.attachmentButtons}>
-                  <TouchableOpacity style={styles.attachBtn} onPress={() => pickMedia(false)}>
-                    <Icon name="image" size={20} color="#4ECDC4" />
-                    <Text style={styles.attachBtnText}>Gallery</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.attachBtn} onPress={() => pickMedia(true)}>
-                    <Icon name="camera" size={20} color="#4ECDC4" />
-                    <Text style={styles.attachBtnText}>Camera</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.attachBtn} onPress={pickDocument}>
-                    <Icon name="paperclip" size={20} color="#4ECDC4" />
-                    <Text style={styles.attachBtnText}>Document</Text>
-                  </TouchableOpacity>
+                <View style={styles.formSection}>
+                  <Text style={styles.label}>Sub Category (Optional)</Text>
+                  <View style={styles.inputWrapper}>
+                    <Icon name="list-alt" size={20} color="#4ECDC4" style={styles.inputIcon} />
+                    <Dropdown
+                      style={styles.dropdown}
+                      data={subQueries.map(sq => ({ label: sq.name, value: sq.id }))}
+                      labelField="label"
+                      valueField="value"
+                      placeholder={
+                        loadingSubQueries ? "Loading..." :
+                        !selectedService ? "Select category first" :
+                        subQueries.length === 0 ? "No sub-categories" : "Select Sub Category"
+                      }
+                      value={selectedSubQuery}
+                      onChange={item => setSelectedSubQuery(item.value)}
+                      disabled={loadingSubQueries || !selectedService || subQueries.length === 0}
+                    />
+                    {loadingSubQueries && <ActivityIndicator size="small" color="#4ECDC4" style={styles.loadingIndicator} />}
+                  </View>
                 </View>
 
-                {attachments.length > 0 && (
-                  <View style={styles.attachmentList}>
-                    <Text style={styles.attachmentsCount}>
-                      {attachments.length} file(s) attached
-                    </Text>
-                    {attachments.map((file, index) => (
-                      <View key={index} style={styles.attachmentItem}>
-                        <Icon 
-                          name={file.type?.includes('image') ? 'image' : 
-                                file.type?.includes('video') ? 'video' : 
-                                'file'} 
-                          size={16} 
-                          color="#4ECDC4" 
-                        />
-                        <Text style={styles.attachmentName} numberOfLines={1}>
-                          {file.name}
+                <View style={styles.formSection}>
+                  <Text style={styles.label}>Priority Level *</Text>
+                  <View style={styles.priorityGroup}>
+                    {[{ value: 'high', label: 'High', color: '#ff6b6b' },
+                      { value: 'normal', label: 'Normal', color: '#4ECDC4' },
+                      { value: 'low', label: 'Low', color: '#ffd166' }].map(item => (
+                      <TouchableOpacity
+                        key={item.value}
+                        style={[styles.priorityOption, priority === item.value && { backgroundColor: item.color, borderColor: item.color }]}
+                        onPress={() => {
+                          setPriority(item.value);
+                          if (item.value !== 'high') setPriorityReason('');
+                        }}
+                      >
+                        <Text style={[styles.priorityText, priority === item.value && styles.priorityTextSelected]}>
+                          {item.label}
                         </Text>
-                        <TouchableOpacity onPress={() => removeAttachment(index)}>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  {priority === 'high' && (
+                    <Animatable.View animation="fadeIn" style={styles.highPriorityReasonContainer}>
+                      <Text style={styles.label}>Reason for High Priority *</Text>
+                      <View style={styles.textareaWrapper}>
+                        <Icon name="exclamation-triangle" size={20} color="#ff6b6b" style={styles.textareaIcon} />
+                        <TextInput
+                          style={styles.textarea}
+                          multiline
+                          placeholder="Explain urgency..."
+                          placeholderTextColor="#999"
+                          value={priorityReason}
+                          onChangeText={setPriorityReason}
+                        />
+                      </View>
+                    </Animatable.View>
+                  )}
+                </View>
+
+                <View style={styles.formSection}>
+                  <Text style={styles.label}>Request Details *</Text>
+                  <View style={styles.textareaWrapper}>
+                    <Icon name="edit" size={20} color="#4ECDC4" style={styles.textareaIcon} />
+                    <TextInput
+                      style={styles.textarea}
+                      multiline
+                      numberOfLines={6}
+                      placeholder="Describe your request..."
+                      placeholderTextColor="#999"
+                      value={requestDetails}
+                      onChangeText={setRequestDetails}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.formSection}>
+                  <Text style={styles.label}>Submitted By *</Text>
+                  <View style={styles.inputWrapper}>
+                    <Icon name="user" size={20} color="#4ECDC4" style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.textInput}
+                      value={submittedBy}
+                      onChangeText={setSubmittedBy}
+                      placeholder="Enter your full name"
+                      placeholderTextColor="#999"
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.formSection}>
+                  <Text style={styles.label}>Attachments (Optional)</Text>
+                  <Text style={styles.helperText}>Add images, documents, or screenshots</Text>
+                  <View style={styles.attachmentButtons}>
+                    <TouchableOpacity style={styles.attachBtn} onPress={() => pickMedia(false)}>
+                      <Icon name="image" size={20} color="#4ECDC4" />
+                      <Text style={styles.attachBtnText}>Gallery</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.attachBtn} onPress={() => pickMedia(true)}>
+                      <Icon name="camera" size={20} color="#4ECDC4" />
+                      <Text style={styles.attachBtnText}>Camera</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.attachBtn} onPress={pickDocument}>
+                      <Icon name="paperclip" size={20} color="#4ECDC4" />
+                      <Text style={styles.attachBtnText}>Document</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {attachments.length > 0 && (
+                    <View style={styles.attachmentList}>
+                      <Text style={styles.attachmentsCount}>
+                        {attachments.length} file(s) attached
+                      </Text>
+                      {attachments.map((file, index) => (
+                        <View key={index} style={styles.attachmentItem}>
+                          <Icon 
+                            name={file.type?.includes('image') ? 'image' : 
+                                  file.type?.includes('video') ? 'video' : 
+                                  'file'} 
+                            size={16} 
+                            color="#4ECDC4" 
+                          />
+                          <Text style={styles.attachmentName} numberOfLines={1}>
+                            {file.name}
+                          </Text>
+                          <TouchableOpacity onPress={() => removeAttachment(index)}>
+                            <Icon name="times" size={18} color="#ff6b6b" />
+                          </TouchableOpacity>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </View>
+
+                {/* ============= REAL VOICE NOTE SECTION ============= */}
+                <View style={styles.formSection}>
+                  <Text style={styles.label}>Voice Note (Optional)</Text>
+                  <Text style={styles.helperText}>Record audio explanation for your request</Text>
+                  
+                  {voiceNote ? (
+                    <View style={styles.voiceNoteContainer}>
+                      <View style={styles.voiceNotePreview}>
+                        <Icon name="microphone" size={20} color="#4ECDC4" />
+                        <View style={{ flex: 1, marginLeft: 10 }}>
+                          <Text style={styles.voiceNoteText}>Voice note saved</Text>
+                          <Text style={styles.voiceNoteDuration}>{voiceNote.duration}</Text>
+                        </View>
+                        <TouchableOpacity 
+                          onPress={isPlaying ? onStopPlay : onStartPlay} 
+                          style={styles.playButton}
+                        >
+                          <Icon name={isPlaying ? "pause" : "play"} size={18} color="#34d399" />
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={removeVoiceNote}>
                           <Icon name="times" size={18} color="#ff6b6b" />
                         </TouchableOpacity>
                       </View>
-                    ))}
-                  </View>
-                )}
-              </View>
-
-              {/* Voice Note Section */}
-              <View style={styles.formSection}>
-                <Text style={styles.label}>Voice Note (Optional - Demo)</Text>
-                <Text style={styles.helperText}>Record audio explanation (simulation)</Text>
-                {voiceNote ? (
-                  <View style={styles.voiceNoteContainer}>
-                    <View style={styles.voiceNotePreview}>
-                      <Icon name="microphone" size={20} color="#4ECDC4" />
-                      <Text style={styles.voiceNoteText}>Voice note saved</Text>
-                      <TouchableOpacity onPress={playVoiceNote} style={styles.playButton}>
-                        <Icon name="play" size={18} color="#34d399" />
-                      </TouchableOpacity>
-                      <TouchableOpacity onPress={removeVoiceNote}>
-                        <Icon name="times" size={18} color="#ff6b6b" />
+                      {isPlaying && (
+                        <View style={styles.playTimeContainer}>
+                          <Text style={styles.playTimeText}>Playing: {playTime}</Text>
+                        </View>
+                      )}
+                    </View>
+                  ) : isRecording ? (
+                    <View style={styles.recordingView}>
+                      <View style={styles.recordingIndicator}>
+                        <Icon name="circle" size={12} color="#ff6b6b" />
+                      </View>
+                      <Text style={styles.recordingText}>Recording... {recordTime}</Text>
+                      <TouchableOpacity style={styles.stopBtn} onPress={onStopRecord}>
+                        <Icon name="stop" size={20} color="#fff" />
                       </TouchableOpacity>
                     </View>
-                  </View>
-                ) : isRecording ? (
-                  <View style={styles.recordingView}>
-                    <View style={styles.recordingIndicator}>
-                      <Icon name="circle" size={24} color="#ff6b6b" />
-                    </View>
-                    <Text style={styles.recordingText}>Recording... {recordingDuration}</Text>
-                    <TouchableOpacity style={styles.stopBtn} onPress={stopRecording}>
-                      <Icon name="stop" size={24} color="#fff" />
+                  ) : (
+                    <TouchableOpacity style={styles.recordBtn} onPress={onStartRecord}>
+                      <Icon name="microphone" size={24} color="#fff" />
+                      <Text style={styles.recordBtnText}>Tap to Record Voice Note</Text>
                     </TouchableOpacity>
-                  </View>
-                ) : (
-                  <TouchableOpacity style={styles.recordBtn} onPress={startRecording}>
-                    <Icon name="microphone" size={24} color="#fff" />
-                    <Text style={styles.recordBtnText}>Tap to Record Voice Note</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-{pendingCount > 0 && (
-            <View style={styles.pendingBanner}>
-              <Icon name="info-circle" size={20} color="#fff" />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.pendingText}>
-                  You have {pendingCount} pending request{pendingCount !== 1 ? 's' : ''}.
-                  {' '}Maximum allowed: 3
-                </Text>
-                {pendingCount >= 3 && (
-                  <Text style={styles.pendingWarning}>
-                    You cannot submit new requests until some are processed.
-                  </Text>
-                )}
-              </View>
-            </View>
-          )}
-              {/* Submit */}
-              <TouchableOpacity
-  style={[styles.submitBtn, (submitLoading || pendingCount >= 3) && styles.submitBtnDisabled]}
-  onPress={handleSubmit}
-  disabled={submitLoading || pendingCount >= 3}
->
-  <LinearGradient colors={['#2C3E50', '#4ECDC4']} style={styles.submitBtnGradient}>
-    {submitLoading ? (
-      <ActivityIndicator color="#fff" />
-    ) : pendingCount >= 3 ? (
-      <Text style={styles.submitBtnText}>Limit Reached (3/3)</Text>
-    ) : (
-      <Text style={styles.submitBtnText}>Submit Request</Text>
-    )}
-  </LinearGradient>
-</TouchableOpacity>
-            </LinearGradient>
-          </Animatable.View>
+                  )}
+                </View>
 
-          <Footer />
-        </ScrollView>
+                {pendingCount > 0 && (
+                  <View style={styles.pendingBanner}>
+                    <Icon name="info-circle" size={20} color="#fff" />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.pendingText}>
+                        You have {pendingCount} pending request{pendingCount !== 1 ? 's' : ''}.
+                        {' '}Maximum allowed: 3
+                      </Text>
+                      {pendingCount >= 3 && (
+                        <Text style={styles.pendingWarning}>
+                          You cannot submit new requests until some are processed.
+                        </Text>
+                      )}
+                    </View>
+                  </View>
+                )}
+
+                <TouchableOpacity
+                  style={[styles.submitBtn, (submitLoading || pendingCount >= 3) && styles.submitBtnDisabled]}
+                  onPress={handleSubmit}
+                  disabled={submitLoading || pendingCount >= 3}
+                >
+                  <LinearGradient colors={['#2C3E50', '#4ECDC4']} style={styles.submitBtnGradient}>
+                    {submitLoading ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : pendingCount >= 3 ? (
+                      <Text style={styles.submitBtnText}>Limit Reached (3/3)</Text>
+                    ) : (
+                      <Text style={styles.submitBtnText}>Submit Request</Text>
+                    )}
+                  </LinearGradient>
+                </TouchableOpacity>
+              </LinearGradient>
+            </Animatable.View>
+          </ScrollView>
+                              <Footer />
+
         </KeyboardAvoidingView>
       </Animated.View>
     </View>
@@ -1040,6 +1160,7 @@ const styles = StyleSheet.create({
     marginLeft: 10,
     marginRight: 10,
   },
+  // ============= VOICE NOTE STYLES =============
   voiceNoteContainer: {
     marginTop: 8,
   },
@@ -1049,16 +1170,33 @@ const styles = StyleSheet.create({
     backgroundColor: '#e8f5e9',
     padding: 12,
     borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#c8e6c9',
   },
   voiceNoteText: {
-    flex: 1,
-    marginLeft: 10,
     color: '#2e7d32',
-    fontWeight: '500',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  voiceNoteDuration: {
+    color: '#2e7d32',
+    fontSize: 12,
+    marginTop: 2,
   },
   playButton: {
     marginRight: 15,
     padding: 5,
+  },
+  playTimeContainer: {
+    backgroundColor: '#f1f8f4',
+    padding: 8,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  playTimeText: {
+    color: '#2e7d32',
+    fontSize: 12,
+    textAlign: 'center',
   },
   recordingView: {
     flexDirection: 'row',
@@ -1071,16 +1209,19 @@ const styles = StyleSheet.create({
   },
   recordingIndicator: {
     marginRight: 10,
+    width: 12,
+    height: 12,
   },
   recordingText: {
     flex: 1,
     color: '#c62828',
     fontWeight: '600',
+    fontSize: 14,
   },
   stopBtn: {
     backgroundColor: '#ff6b6b',
     borderRadius: 20,
-    padding: 8,
+    padding: 10,
     marginLeft: 10,
   },
   recordBtn: {
@@ -1090,34 +1231,39 @@ const styles = StyleSheet.create({
     backgroundColor: '#4ECDC4',
     padding: 16,
     borderRadius: 12,
+    shadowColor: '#4ECDC4',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   recordBtnText: {
     color: '#fff',
     marginLeft: 10,
     fontWeight: '600',
+    fontSize: 15,
   },
   pendingBanner: {
-  backgroundColor: '#ffd166',
-  padding: 12,
-  marginHorizontal: 20,
-  marginBottom: 16,
-  borderRadius: 12,
-  flexDirection: 'row',
-  alignItems: 'center',
-  gap: 10,
-},
-pendingText: {
-  color: '#fff',
-  fontSize: 14,
-  fontWeight: '600',
-  flex: 1,
-},
-pendingWarning: {
-  color: '#fff',
-  fontSize: 13,
-  fontWeight: 'bold',
-  marginTop: 4,
-},
+    backgroundColor: '#ffd166',
+    padding: 12,
+    marginBottom: 16,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  pendingText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+  },
+  pendingWarning: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: 'bold',
+    marginTop: 4,
+  },
   submitBtn: {
     borderRadius: 12,
     overflow: 'hidden',

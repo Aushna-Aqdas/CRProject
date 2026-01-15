@@ -915,7 +915,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   picker: {
-    height: 44,
+    height: 50,
     fontSize: 14,
     color: '#1A252F',
   },

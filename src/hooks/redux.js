@@ -41,5 +41,6 @@
       loadUser,
       clearError: clearAuthError,
       manualSetAuth, // For debugging
+      userApi: apiService, // ✅ ADDED: Provide API service to components
     };
   };

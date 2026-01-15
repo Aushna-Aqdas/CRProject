@@ -21,6 +21,7 @@ import { adminAPI } from '../../services/apiService';
 import { useAuth } from '../../hooks/redux';
 import AsyncStorage from '@react-native-async-storage/async-storage'; // Add this
 import Footer from '../../components/Footer'; // Add this import
+import Pagination from '../../components/Pagination';
 
 
 const { width } = Dimensions.get('window');
@@ -319,8 +320,10 @@ const ProjectManagement = ({ navigation }) => {
                 <Text style={styles.statNumber}>{stats.app_projects || 0}</Text>
                 <Text style={styles.statLabel}>Mobile</Text>
               </View>
+              
             </View>
           </View>
+          
 
           {/* Search */}
           <View style={styles.searchContainer}>
@@ -356,6 +359,7 @@ const ProjectManagement = ({ navigation }) => {
                 <Text style={styles.emptyMessage}>
                   {searchText ? 'Try different keywords' : 'Create your first project'}
                 </Text>
+                
                 <TouchableOpacity
                   style={[styles.emptyButton, { backgroundColor: statColors.total }]}
                   onPress={handleAddProject}
@@ -365,54 +369,17 @@ const ProjectManagement = ({ navigation }) => {
                 </TouchableOpacity>
               </View>
             }
+             ListFooterComponent={
+    <Pagination
+      pagination={pagination}
+      onFirst={goToFirstPage}
+      onPrev={goToPreviousPage}
+      onNext={goToNextPage}
+      onLast={goToLastPage}
+    />
+        }
             contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 20 }}
           />
-
-          {/* Pagination */}
-          {pagination.total > 0 && (
-            <View style={styles.paginationContainer}>
-              <Text style={styles.paginationText}>
-                Showing {pagination.from}-{pagination.to} of {pagination.total} projects
-              </Text>
-              <View style={styles.paginationControls}>
-                <TouchableOpacity
-                  style={[styles.paginationButton, pagination.current_page === 1 && styles.paginationButtonDisabled]}
-                  onPress={goToFirstPage}
-                  disabled={pagination.current_page === 1}
-                >
-                  <Icon name="step-backward" size={16} color={pagination.current_page === 1 ? '#ccc' : statColors.total} />
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.paginationButton, pagination.current_page === 1 && styles.paginationButtonDisabled]}
-                  onPress={goToPreviousPage}
-                  disabled={pagination.current_page === 1}
-                >
-                  <Icon name="chevron-left" size={16} color={pagination.current_page === 1 ? '#ccc' : statColors.total} />
-                </TouchableOpacity>
-
-                <Text style={styles.pageIndicator}>
-                  Page {pagination.current_page} of {pagination.last_page}
-                </Text>
-
-                <TouchableOpacity
-                  style={[styles.paginationButton, pagination.current_page === pagination.last_page && styles.paginationButtonDisabled]}
-                  onPress={goToNextPage}
-                  disabled={pagination.current_page === pagination.last_page}
-                >
-                  <Icon name="chevron-right" size={16} color={pagination.current_page === pagination.last_page ? '#ccc' : statColors.total} />
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.paginationButton, pagination.current_page === pagination.last_page && styles.paginationButtonDisabled]}
-                  onPress={goToLastPage}
-                  disabled={pagination.current_page === pagination.last_page}
-                >
-                  <Icon name="step-forward" size={16} color={pagination.current_page === pagination.last_page ? '#ccc' : statColors.total} />
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
 
           {/* Modal */}
           <Modal animationType="slide" transparent={true} visible={modalVisible} onRequestClose={() => setModalVisible(false)}>
@@ -471,10 +438,12 @@ const ProjectManagement = ({ navigation }) => {
                   >
                     <Text style={styles.modalSubmitText}>{editMode ? 'Update' : 'Create'}</Text>
                   </TouchableOpacity>
+
                 </View>
               </View>
             </View>
           </Modal>
+          
         <Footer />
         </>
       )}

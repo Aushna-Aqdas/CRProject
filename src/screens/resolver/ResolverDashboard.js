@@ -14,14 +14,14 @@ import {
   Dimensions,
   DrawerLayoutAndroid
 } from 'react-native';
-import { useAuth } from '../hooks/redux';
+import { useAuth } from '../../hooks/redux';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import LinearGradient from 'react-native-linear-gradient';
+import apiService from '../../services/apiService';  // or wherever your api file is
 
 const { width } = Dimensions.get('window');
 
 const ResolverDashboard = ({ navigation }) => {
-  // ALL HOOKS MUST BE CALLED AT THE TOP LEVEL IN THE SAME ORDER
   const { user, userApi, logout } = useAuth();
   const [dashboardData, setDashboardData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -29,193 +29,53 @@ const ResolverDashboard = ({ navigation }) => {
   const [filter, setFilter] = useState('all'); // 'all', 'pending', 'inprogress', 'completed'
   const drawerRef = useRef(null);
 
-  // useCallback hooks must be called after all useState/useRef hooks
   const handleLogout = useCallback(async () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await logout();
-              navigation.navigate('Login');
-            } catch (error) {
-              Alert.alert('Error', 'Failed to logout');
-            }
+    Alert.alert('Logout', 'Are you sure you want to logout?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Logout',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await logout();
+            navigation.navigate('Login');
+          } catch (error) {
+            Alert.alert('Error', 'Failed to logout');
           }
-        }
-      ]
-    );
+        },
+      },
+    ]);
   }, [logout, navigation]);
 
   const openDrawer = useCallback(() => {
-    console.log('Opening drawer, ref:', drawerRef.current);
-    if (drawerRef.current) {
-      drawerRef.current.openDrawer();
-    } else {
-      console.warn('Drawer ref is null');
-    }
+    drawerRef.current?.openDrawer();
   }, []);
 
   const closeDrawer = useCallback(() => {
-    if (drawerRef.current) {
-      drawerRef.current.closeDrawer();
-    }
+    drawerRef.current?.closeDrawer();
   }, []);
 
-  // Filter requests based on selected filter
   const getFilteredRequests = useCallback(() => {
-    if (!dashboardData || !dashboardData.assigned_requests) return [];
-    
-    if (filter === 'all') {
-      return dashboardData.assigned_requests;
-    }
-    
-    return dashboardData.assigned_requests.filter(request => 
-      request.status.toLowerCase() === filter.toLowerCase()
+    if (!dashboardData?.requests) return [];
+
+    if (filter === 'all') return dashboardData.requests;
+
+    return dashboardData.requests.filter(
+      (req) => req.status.toLowerCase() === filter.toLowerCase()
     );
   }, [dashboardData, filter]);
 
-  // Navigation view must be defined as useCallback
-  const navigationView = useCallback(() => (
-    <View style={styles.drawerContainer}>
-      <LinearGradient
-        colors={['#2C3E50', '#4ECDC4']}
-        style={styles.drawerHeader}
-      >
-        <View style={styles.drawerHeaderContent}>
-          <View style={styles.userAvatar}>
-            <Icon name="account-tie" size={40} color="#fff" />
-          </View>
-          <Text style={styles.drawerUserName}>
-            {user?.name || 'Resolver'}
-          </Text>
-          <Text style={styles.drawerUserRole}>Resolver</Text>
-        </View>
-      </LinearGradient>
-
-      <View style={styles.drawerMenu}>
-        <Text style={styles.filterTitle}>Filter Requests</Text>
-        
-        {/* Filter Options */}
-        <TouchableOpacity 
-          style={[styles.filterItem, filter === 'all' && styles.filterItemActive]}
-          onPress={() => {
-            setFilter('all');
-            closeDrawer();
-          }}
-        >
-          <Icon name="format-list-bulleted" size={20} color={filter === 'all' ? '#fff' : '#2C3E50'} />
-          <Text style={[styles.filterItemText, filter === 'all' && styles.filterItemTextActive]}>
-            All Requests
-          </Text>
-          {filter === 'all' && (
-            <Icon name="check" size={16} color="#fff" style={styles.filterCheck} />
-          )}
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={[styles.filterItem, filter === 'pending' && styles.filterItemActive]}
-          onPress={() => {
-            setFilter('pending');
-            closeDrawer();
-          }}
-        >
-          <Icon name="clock" size={20} color={filter === 'pending' ? '#fff' : '#F59E0B'} />
-          <Text style={[styles.filterItemText, filter === 'pending' && styles.filterItemTextActive]}>
-            Pending
-          </Text>
-          {filter === 'pending' && (
-            <Icon name="check" size={16} color="#fff" style={styles.filterCheck} />
-          )}
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={[styles.filterItem, filter === 'inprogress' && styles.filterItemActive]}
-          onPress={() => {
-            setFilter('inprogress');
-            closeDrawer();
-          }}
-        >
-          <Icon name="sync" size={20} color={filter === 'inprogress' ? '#fff' : '#3B82F6'} />
-          <Text style={[styles.filterItemText, filter === 'inprogress' && styles.filterItemTextActive]}>
-            In Progress
-          </Text>
-          {filter === 'inprogress' && (
-            <Icon name="check" size={16} color="#fff" style={styles.filterCheck} />
-          )}
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={[styles.filterItem, filter === 'completed' && styles.filterItemActive]}
-          onPress={() => {
-            setFilter('completed');
-            closeDrawer();
-          }}
-        >
-          <Icon name="check-circle" size={20} color={filter === 'completed' ? '#fff' : '#10B981'} />
-          <Text style={[styles.filterItemText, filter === 'completed' && styles.filterItemTextActive]}>
-            Completed
-          </Text>
-          {filter === 'completed' && (
-            <Icon name="check" size={16} color="#fff" style={styles.filterCheck} />
-          )}
-        </TouchableOpacity>
-
-        <View style={styles.drawerDivider} />
-
-        <TouchableOpacity 
-          style={styles.drawerItem}
-          onPress={() => {
-            closeDrawer();
-          }}
-        >
-          <Icon name="home" size={20} color="#2C3E50" />
-          <Text style={styles.drawerItemText}>Dashboard</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={styles.drawerItem}
-          onPress={() => {
-            closeDrawer();
-          }}
-        >
-          <Icon name="format-list-bulleted" size={20} color="#2C3E50" />
-          <Text style={styles.drawerItemText}>My Requests</Text>
-        </TouchableOpacity>
-
-        <View style={styles.drawerDivider} />
-
-        <TouchableOpacity 
-          style={[styles.drawerItem, styles.logoutDrawerItem]}
-          onPress={() => {
-            closeDrawer();
-            handleLogout();
-          }}
-        >
-          <Icon name="logout" size={20} color="#e74c3c" />
-          <Text style={[styles.drawerItemText, styles.logoutText]}>Logout</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  ), [user, closeDrawer, handleLogout, filter]);
-
-  // Regular functions (not hooks) can be defined after all hooks
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      const response = await userApi.resolver.getDashboard();
+const response = await apiService.resolver.getDashboard();
       if (response.data.success) {
-        setDashboardData(response.data.data);
+        setDashboardData(response.data);
       } else {
         Alert.alert('Error', response.data.message || 'Failed to load dashboard');
       }
     } catch (error) {
-      console.log('Dashboard error:', error);
+      console.error('Dashboard fetch error:', error);
       Alert.alert('Error', 'Failed to load dashboard data');
     } finally {
       setLoading(false);
@@ -223,27 +83,68 @@ const ResolverDashboard = ({ navigation }) => {
     }
   };
 
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
   const onRefresh = () => {
     setRefreshing(true);
     fetchDashboardData();
   };
 
-  // useEffect must be called after all other hooks
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
+  const navigationView = useCallback(
+    () => (
+      <View style={styles.drawerContainer}>
+        <LinearGradient colors={['#2C3E50', '#4ECDC4']} style={styles.drawerHeader}>
+          <View style={styles.drawerHeaderContent}>
+            <View style={styles.userAvatar}>
+              <Icon name="account-tie" size={40} color="#fff" />
+            </View>
+            <Text style={styles.drawerUserName}>{user?.name || 'Resolver'}</Text>
+            <Text style={styles.drawerUserRole}>Resolver</Text>
+          </View>
+        </LinearGradient>
 
-  // Add focus listener to reset drawer when returning to screen
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
-      // Reset drawer state when screen comes into focus
-      if (drawerRef.current) {
-        drawerRef.current.closeDrawer();
-      }
-    });
+        <View style={styles.drawerMenu}>
+          <Text style={styles.filterTitle}>Filter Requests</Text>
 
-    return unsubscribe;
-  }, [navigation]);
+          {['all', 'pending', 'inprogress', 'completed'].map((f) => (
+            <TouchableOpacity
+              key={f}
+              style={[styles.filterItem, filter === f && styles.filterItemActive]}
+              onPress={() => {
+                setFilter(f);
+                closeDrawer();
+              }}
+            >
+              <Icon
+                name={f === 'all' ? 'format-list-bulleted' : f === 'pending' ? 'clock' : f === 'inprogress' ? 'sync' : 'check-circle'}
+                size={20}
+                color={filter === f ? '#fff' : '#2C3E50'}
+              />
+              <Text style={[styles.filterItemText, filter === f && styles.filterItemTextActive]}>
+                {f === 'all' ? 'All Requests' : f === 'inprogress' ? 'In Progress' : f.charAt(0).toUpperCase() + f.slice(1)}
+              </Text>
+              {filter === f && <Icon name="check" size={16} color="#fff" style={styles.filterCheck} />}
+            </TouchableOpacity>
+          ))}
+
+          <View style={styles.drawerDivider} />
+
+          <TouchableOpacity style={styles.drawerItem} onPress={() => { closeDrawer(); }}>
+            <Icon name="home" size={20} color="#2C3E50" />
+            <Text style={styles.drawerItemText}>Dashboard</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={[styles.drawerItem, styles.logoutDrawerItem]} onPress={() => { closeDrawer(); handleLogout(); }}>
+            <Icon name="logout" size={20} color="#e74c3c" />
+            <Text style={[styles.drawerItemText, styles.logoutText]}>Logout</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    ),
+    [user, filter, closeDrawer, handleLogout]
+  );
 
   const StatCard = ({ title, value, icon, color }) => (
     <View style={styles.statCard}>
@@ -256,7 +157,7 @@ const ResolverDashboard = ({ navigation }) => {
   );
 
   const RequestItem = ({ request }) => (
-    <TouchableOpacity 
+    <TouchableOpacity
       style={styles.requestItem}
       onPress={() => navigation.navigate('ResolverRequestDetail', { requestId: request.id })}
     >
@@ -266,18 +167,18 @@ const ResolverDashboard = ({ navigation }) => {
           <Text style={styles.statusText}>{request.status}</Text>
         </View>
       </View>
-      
+
       <Text style={styles.userName}>
-        <Icon name="account" size={16} color="#666" /> {request.user.name}
+        <Icon name="account" size={16} color="#666" /> {request.user_name || 'N/A'}
       </Text>
-      
-      <Text style={styles.serviceText}>{request.service.name}</Text>
-      
+
+      <Text style={styles.serviceText}>{request.service_title || 'N/A'}</Text>
+
       <View style={styles.requestFooter}>
         <View style={[styles.priorityBadge, styles[`priority${request.priority.charAt(0).toUpperCase() + request.priority.slice(1)}`]]}>
           <Text style={styles.priorityText}>{request.priority}</Text>
         </View>
-        <Text style={styles.dateText}>{request.created_formatted}</Text>
+        <Text style={styles.dateText}>{request.created_at}</Text>
       </View>
     </TouchableOpacity>
   );
@@ -299,129 +200,56 @@ const ResolverDashboard = ({ navigation }) => {
       drawerWidth={300}
       drawerPosition="left"
       renderNavigationView={navigationView}
-      drawerLockMode="unlocked"
-      onDrawerOpen={() => console.log('Drawer opened')}
-      onDrawerClose={() => console.log('Drawer closed')}
-      keyboardDismissMode="on-drag"
     >
       <View style={styles.container}>
         <StatusBar backgroundColor="#2C3E50" barStyle="light-content" />
-        
-        {/* Top Navbar */}
+
+        {/* Navbar */}
         <View style={styles.navbar}>
-          <TouchableOpacity 
-            style={styles.menuButton}
-            onPress={openDrawer}
-            activeOpacity={0.7}
-          >
+          <TouchableOpacity style={styles.menuButton} onPress={openDrawer}>
             <Icon name="menu" size={24} color="#fff" />
           </TouchableOpacity>
-          
-          <View style={styles.navbarCenter}>
-            <Text style={styles.navbarTitle}>Resolver Dashboard</Text>
-          </View>
-          
-          <View style={styles.navbarRight}>
-            <TouchableOpacity style={styles.navbarIcon}>
-              <Icon name="account" size={20} color="#fff" />
-            </TouchableOpacity>
-          </View>
+          <Text style={styles.navbarTitle}>Resolver Dashboard</Text>
+          <View style={styles.navbarRight} />
         </View>
 
-        <ScrollView 
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
-          showsVerticalScrollIndicator={false}
+        <ScrollView
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           contentContainerStyle={styles.scrollContent}
         >
-          {/* Header Section */}
-          <LinearGradient
-            colors={['#2C3E50', '#4ECDC4']}
-            style={styles.header}
-          >
-            <View style={styles.headerContent}>
-              <View style={styles.headerText}>
-                <Text style={styles.welcomeText}>
-                  Welcome, {user?.name || 'Resolver'}
-                </Text>
-                <Text style={styles.roleText}>Manage your assigned requests efficiently</Text>
-              </View>
-              {/* Filter Badge */}
-              {filter !== 'all' && (
-                <View style={styles.filterBadge}>
-                  <Text style={styles.filterBadgeText}>
-                    Showing: {filter.charAt(0).toUpperCase() + filter.slice(1)}
-                  </Text>
-                </View>
-              )}
-            </View>
+          <LinearGradient colors={['#2C3E50', '#4ECDC4']} style={styles.header}>
+            <Text style={styles.welcomeText}>Welcome, {user?.name || 'Resolver'}</Text>
+            <Text style={styles.roleText}>Manage your assigned requests</Text>
           </LinearGradient>
 
-          {/* Statistics Grid */}
           {dashboardData && (
             <>
               <View style={styles.statsContainer}>
                 <View style={styles.statsRow}>
-                  <StatCard 
-                    title="Total Requests" 
-                    value={dashboardData.stats.total} 
-                    icon="inbox" 
-                    color="#2C3E50" 
-                  />
-                  <StatCard 
-                    title="Pending" 
-                    value={dashboardData.stats.pending} 
-                    icon="clock" 
-                    color="#F59E0B" 
-                  />
+                  <StatCard title="Total" value={dashboardData.stats.total} icon="inbox" color="#2C3E50" />
+                  <StatCard title="Pending" value={dashboardData.stats.pending} icon="clock" color="#F59E0B" />
                 </View>
-
                 <View style={styles.statsRow}>
-                  <StatCard 
-                    title="In Progress" 
-                    value={dashboardData.stats.in_progress} 
-                    icon="sync" 
-                    color="#3B82F6" 
-                  />
-                  <StatCard 
-                    title="Completed" 
-                    value={dashboardData.stats.completed} 
-                    icon="check-circle" 
-                    color="#10B981" 
-                  />
+                  <StatCard title="In Progress" value={dashboardData.stats.inprogress} icon="sync" color="#3B82F6" />
+                  <StatCard title="Completed" value={dashboardData.stats.completed} icon="check-circle" color="#10B981" />
                 </View>
               </View>
 
-              {/* Requests List */}
               <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle}>
-                    {filter === 'all' ? 'Your Assigned Requests' : `${filter.charAt(0).toUpperCase() + filter.slice(1)} Requests`}
-                  </Text>
-                  <Text style={styles.requestCount}>
-                    {filteredRequests.length} {filteredRequests.length === 1 ? 'request' : 'requests'}
-                  </Text>
-                </View>
+                <Text style={styles.sectionTitle}>
+                  {filter === 'all' ? 'Assigned Requests' : `${filter.charAt(0).toUpperCase() + filter.slice(1)} Requests`}
+                </Text>
 
                 {filteredRequests.length === 0 ? (
                   <View style={styles.emptyState}>
-                    <Icon name="inbox" size={50} color="#CBD5E1" />
-                    <Text style={styles.emptyStateTitle}>
-                      {filter === 'all' ? 'No requests found!' : `No ${filter} requests found!`}
-                    </Text>
-                    <Text style={styles.emptyStateText}>
-                      {filter === 'all' 
-                        ? 'There are no requests assigned to you at the moment.'
-                        : `There are no ${filter} requests assigned to you at the moment.`
-                      }
-                    </Text>
+                    <Icon name="inbox" size={60} color="#CBD5E1" />
+                    <Text style={styles.emptyStateText}>No {filter === 'all' ? '' : filter} requests found</Text>
                   </View>
                 ) : (
                   <FlatList
                     data={filteredRequests}
                     renderItem={({ item }) => <RequestItem request={item} />}
-                    keyExtractor={item => item.id.toString()}
+                    keyExtractor={(item) => item.id.toString()}
                     scrollEnabled={false}
                   />
                 )}

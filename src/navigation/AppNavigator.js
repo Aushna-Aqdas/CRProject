@@ -6,16 +6,21 @@ import SplashScreen from '../screens/SplashScreen';
 import LoginScreen from '../screens/auth/LoginScreen';
 // Import all your screens...
 import UserDashboard from '../screens/user/UserDashboard';
-import ResolverDashboard from '../screens/ResolverDashboard';
-import ResolverRequestDetail from '../screens/ResolverRequestDetail';
-import AssignerDashboardScreen from '../screens/AssignerDashboardScreen';
-import RequestDetailScreen from '../screens/RequestDetailScreen';
+import ResolverDashboard from '../screens/resolver/ResolverDashboard';
+import ResolverRequestDetail from '../screens/resolver/ResolverRequestDetail';
+import AssignerDashboardScreen from '../screens/assigner/AssignerDashboardScreen';
+import RequestDetailScreen from '../screens/assigner/RequestDetailScreen';
 import UserHistoryScreen from '../screens/user/UserHistoryScreen';
 import DrawerNavigator from './DrawerNavigator';
 import AdgDashboardScreen from '../screens/adg/AdgDashboardScreen';
 import DeptHeadDashboard from '../screens/depthead/DeptHeadDashboard';
 import CurrentProjectsScreen from '../screens/depthead/CurrentProjectsScreen';
 import DeptHeadRequestDetails from '../screens/depthead/DeptHeadRequestDetailScreen';
+import ProjectsFromAssignersScreen from '../screens/depthead/ProjectsFromAssignersScreen';
+import ProjectConversationScreen from '../screens/depthead/ProjectConversationScreen';
+import RespondToAssignerScreen from '../screens/depthead/RespondToAssignerScreen';
+
+
 
 import apiService from '../services/apiService'; // 🚨 ADD THIS IMPORT
 
@@ -100,11 +105,23 @@ const AppNavigator = () => {
               <>
                 <Stack.Screen name="DeptHeadDashboard" component={DeptHeadDashboard} />
                 <Stack.Screen 
-  name="CurrentProjectsScreen" 
-  component={CurrentProjectsScreen} 
+                  name="CurrentProjectsScreen" 
+                  component={CurrentProjectsScreen} 
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen 
+                  name="DeptHeadRequestDetailScreen" 
+                  component={DeptHeadRequestDetails} 
+                />
+              <Stack.Screen
+  name="ProjectsFromAssigners"
+  component={ProjectsFromAssignersScreen}
   options={{ headerShown: false }}
+  
 />
-                <Stack.Screen name="DeptHeadRequestDetailScreen" component={DeptHeadRequestDetails} />
+<Stack.Screen name="ProjectConversation" component={ProjectConversationScreen} />
+<Stack.Screen name="RespondToAssigner" component={RespondToAssignerScreen} />
+
               </>
             )}
           </>

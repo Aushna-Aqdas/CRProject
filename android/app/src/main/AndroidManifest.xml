@@ -29,16 +29,17 @@
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 
-    <application
-        android:name=".MainApplication"
-        android:label="@string/app_name"
-        android:icon="@mipmap/ic_launcher"
-        android:roundIcon="@mipmap/ic_launcher_round"
-        android:allowBackup="false"
-        android:theme="@style/AppTheme"
-        android:usesCleartextTraffic="${usesCleartextTraffic}"
-        android:supportsRtl="true"
-        android:requestLegacyExternalStorage="true">
+   <application
+    android:name=".MainApplication"
+    android:label="@string/app_name"
+    android:icon="@mipmap/ic_launcher"
+    android:roundIcon="@mipmap/ic_launcher_round"
+    android:allowBackup="false"
+    android:theme="@style/AppTheme"
+    android:usesCleartextTraffic="true"
+    android:supportsRtl="true"
+    android:requestLegacyExternalStorage="true">
+        
 
         <!-- FileProvider for sharing files from pickers/recorder (required on Android 7+) -->
         <provider

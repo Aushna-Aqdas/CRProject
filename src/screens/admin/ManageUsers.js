@@ -17,7 +17,7 @@ import Icon from 'react-native-vector-icons/FontAwesome';
 import { useAuth } from '../../hooks/redux';
 import LinearGradient from 'react-native-linear-gradient';
 import Footer from '../../components/Footer'; // Add this import
-
+import Pagination from '../../components/Pagination';
 
 
 const { width } = Dimensions.get('window');
@@ -250,67 +250,18 @@ const renderUserItem = ({ item, index }) => (
             <Text style={styles.emptyText}>No users found</Text>
           </View>
         }
+        
+        ListFooterComponent={
+    <Pagination
+      pagination={pagination}
+      onFirst={goToFirstPage}
+      onPrev={goToPreviousPage}
+      onNext={goToNextPage}
+      onLast={goToLastPage}
+    />
+        }
         contentContainerStyle={styles.listContent}
       />
-
-      {/* Pagination Controls */}
-      {pagination && pagination.total > 0 && (
-        <View style={styles.paginationContainer}>
-          <Text style={styles.paginationText}>
-            Showing {pagination.from}-{pagination.to} of {pagination.total} users
-          </Text>
-          
-          <View style={styles.paginationControls}>
-            <TouchableOpacity 
-              style={[
-                styles.paginationButton,
-                pagination.current_page === 1 && styles.paginationButtonDisabled
-              ]}
-              onPress={goToFirstPage}
-              disabled={pagination.current_page === 1}
-            >
-              <Icon name="step-backward" size={14} color={pagination.current_page === 1 ? "#ccc" : "#2C3E50"} />
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[
-                styles.paginationButton,
-                pagination.current_page === 1 && styles.paginationButtonDisabled
-              ]}
-              onPress={goToPreviousPage}
-              disabled={pagination.current_page === 1}
-            >
-              <Icon name="chevron-left" size={14} color={pagination.current_page === 1 ? "#ccc" : "#2C3E50"} />
-            </TouchableOpacity>
-            
-            <Text style={styles.pageIndicator}>
-              Page {pagination.current_page} of {pagination.last_page}
-            </Text>
-            
-            <TouchableOpacity 
-              style={[
-                styles.paginationButton,
-                pagination.current_page === pagination.last_page && styles.paginationButtonDisabled
-              ]}
-              onPress={goToNextPage}
-              disabled={pagination.current_page === pagination.last_page}
-            >
-              <Icon name="chevron-right" size={14} color={pagination.current_page === pagination.last_page ? "#ccc" : "#2C3E50"} />
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[
-                styles.paginationButton,
-                pagination.current_page === pagination.last_page && styles.paginationButtonDisabled
-              ]}
-              onPress={goToLastPage}
-              disabled={pagination.current_page === pagination.last_page}
-            >
-              <Icon name="step-forward" size={14} color={pagination.current_page === pagination.last_page ? "#ccc" : "#2C3E50"} />
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
                   <Footer />
       
     </View>
@@ -498,12 +449,7 @@ const styles = StyleSheet.create({
     color: '#666',
     fontSize: 16,
   },
-  paginationContainer: {
-    padding: 15,
-    backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: '#e2e8f0',
-  },
+
   paginationText: {
     textAlign: 'center',
     color: '#666',

@@ -68,7 +68,6 @@ const DeptHeadDashboard = ({ navigation }) => {
     console.log('📊 Fetching dashboard statistics...');
 
     const response = await api.deptHead.getStatistics();
-    console.log('Raw API Response:', response.data); // ← ADD THIS FOR DEBUGGING
 
     if (response.data.success) {
       // Handle both possible structures
@@ -310,22 +309,6 @@ const DeptHeadDashboard = ({ navigation }) => {
             Manage and oversee your departmental operations with precision and
             efficiency
           </Text>
-
-          {/* Debug button (remove in production) */}
-          <TouchableOpacity
-            style={styles.debugButton}
-            onPress={async () => {
-              const token = await AsyncStorage.getItem('api_token');
-              Alert.alert(
-                'Debug Info',
-                `Token: ${token ? 'Present' : 'Missing'}\n` +
-                  `Stats loaded: ${!loading ? 'Yes' : 'No'}`,
-                [{ text: 'OK' }],
-              );
-            }}
-          >
-            <Text style={styles.debugText}>Debug</Text>
-          </TouchableOpacity>
         </View>
 
         {/* Statistics Section */}
@@ -365,28 +348,22 @@ const DeptHeadDashboard = ({ navigation }) => {
 
           <DashboardCard
             title="Current Projects"
-            subtitle="Manage pending and completed requests and view all tasks history"
+            subtitle="View active projects, track progress, and manage team contributions in real time."
             icon="folder-open"
             color="#06B6D4"
             onPress={() => navigation.navigate('CurrentProjectsScreen')}
           />
 
           <DashboardCard
-            title="Analytics & Reports"
-            subtitle="Access comprehensive analytics and generate reports"
-            icon="line-chart"
-            color="#2C3E50"
-            onPress={() =>
-              Alert.alert(
-                'Coming Soon',
-                'Analytics feature will be available soon',
-              )
-            }
-          />
-
+  title="Projects from Assigners"
+  subtitle="View projects assigned by your team members and track their progress"
+  icon="comments"
+  color="#8B5CF6"
+  onPress={() => navigation.navigate('ProjectsFromAssigners')}
+/>
           <DashboardCard
             title="Team Management"
-            subtitle="Manage team members and monitor performance"
+            subtitle="Manage team members, assign roles, monitor performance, and track individual contributions."
             icon="users"
             color="#F59E0B"
             onPress={() =>
@@ -531,17 +508,6 @@ titleContainer: {
     lineHeight: 22,
     maxWidth: 600,
     marginBottom: 16,
-  },
-  debugButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: '#E2E8F0',
-    borderRadius: 6,
-    marginTop: 8,
-  },
-  debugText: {
-    fontSize: 12,
-    color: '#64748B',
   },
   statsSection: {
     paddingHorizontal: 16,

@@ -1,7 +1,7 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const BASE_URL = 'http://10.50.207.61:8000/api';
+const BASE_URL = 'http://10.50.206.67:8000/api';
 
 // Create axios instance
 const apiService = axios.create({
@@ -235,48 +235,111 @@ export const userAPI = {
     }),
 };
 
+// apiService.js - FIXED VERSION
+
 export const assignerAPI = {
-  getRequests: (params = {}) => apiService.get('/assigner/requests', { params }),
-  getRequestsByStatus: (status, params = {}) => 
-    apiService.get(`/assigner/requests/status/${status}`, { params }),
+  /**
+   * Get assigner dashboard (requests + stats)
+   * GET /assigner/dashboard
+   */
+  getDashboard: () => apiService.get('/assigner/dashboard'),
+
+  /**
+   * Get full request details (with conversations, developers, dept head info)
+   * GET /assigner/requests/{id}
+   */
   getRequestDetails: (requestId) => 
     apiService.get(`/assigner/requests/${requestId}`),
-  getDevelopers: () => apiService.get('/assigner/developers'),
-  assignToDeveloper: (data) => apiService.post('/assigner/assign', data),
-  updatePricingOnly: (requestId, pricing) => 
-    apiService.post(`/assigner/requests/${requestId}/pricing-only`, { pricing }),
-  uploadFileAndPricing: async (requestId, fileData, fileName, fileType, pricing = null) => {
-    const payload = {
-      file_name: fileName,
-      file_data: fileData,
-      file_type: fileType,
-    };
-    if (pricing !== null && pricing !== '') {
-      payload.pricing = Number(pricing);
+
+  /**
+   * Send remarks/action to dept head (with optional attachment)
+   * POST /assigner/requests/{id}/action
+   * FIXED: Properly handle FormData for React Native
+   */
+  sendActionToDeptHead: (requestId, payload) => {
+    const formData = new FormData();
+    
+    // Add remarks
+    formData.append('assigner_remarks', payload.assigner_remarks);
+    
+    // Add attachment if exists (React Native file format)
+    if (payload.assigner_attachment) {
+      formData.append('assigner_attachment', {
+        uri: payload.assigner_attachment.uri,
+        type: payload.assigner_attachment.type,
+        name: payload.assigner_attachment.name,
+      });
     }
-    return apiService.post(`/assigner/upload-file/${requestId}`, payload);
+
+    return apiService.post(`/assigner/requests/${requestId}/action`, formData, {
+      headers: { 
+        'Content-Type': 'multipart/form-data',
+      },
+    });
   },
-  updatePricingAndFile: (requestId, formData) =>
-    apiService.post(`/assigner/requests/${requestId}/update-pricing-file`, formData, {
+
+  /**
+   * Assign developer to request
+   * POST /assigner/requests/{id}/assign
+   * Data: { developer_id: number, assigner_comments?: string }
+   */
+  assignToDeveloper: (requestId, data) => 
+    apiService.post(`/assigner/requests/${requestId}/assign`, data),
+
+  /**
+   * Upload attachment for completed request
+   * POST /assigner/requests/{id}/update-completed
+   * FIXED: Only attachment (no pricing as per your backend)
+   */
+  updateCompletedRequest: (requestId, attachmentFile) => {
+    const formData = new FormData();
+    formData.append('attachment', {
+      uri: attachmentFile.uri,
+      type: attachmentFile.type,
+      name: attachmentFile.name,
+    });
+
+    return apiService.post(`/assigner/requests/${requestId}/update-completed`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
-    }),
-  downloadAttachment: (requestId) =>
-    apiService.get(`/assigner/requests/${requestId}/attachment`, {
-      responseType: 'blob',
-    }),
-  debugAttachments: () => apiService.get('/assigner/debug-attachments'),
-  debugUploadIssue: (requestId) => apiService.get(`/assigner/debug-upload-issue/${requestId}`),
+    });
+  },
 };
-
+// src/api/resolverAPI.js
 export const resolverAPI = {
+  /**
+   * Get resolver dashboard with assigned requests and stats
+   * GET /resolver/dashboard
+   */
   getDashboard: () => apiService.get('/resolver/dashboard'),
-  getAssignedRequests: () => apiService.get('/resolver/requests'),
+  
+  /**
+   * Get specific request details (only if assigned to current resolver)
+   * GET /resolver/requests/{id}
+   */
   getRequestDetails: (id) => apiService.get(`/resolver/requests/${id}`),
-  updateRequestStatus: (id, data) => apiService.put(`/resolver/requests/${id}/status`, data),
-  getStatistics: () => apiService.get('/resolver/statistics'),
-  getProfile: () => apiService.get('/resolver/profile'),
+  
+  /**
+   * Update request status (with hours worked and comments)
+   * PATCH /resolver/requests/{id}/status
+   * 
+   * FIXED ISSUES:
+   * 1. Changed POST to PATCH (matches route)
+   * 2. Using correct parameter name: hours_worked (not working_hours)
+   */
+  updateRequestStatus: (id, data) => {
+    // ✅ FIXED: Ensure correct parameter names match controller
+    const payload = {
+      status: data.status,
+      hours_worked: data.hours_worked,  // ✅ Changed from working_hours
+      resolver_comment: data.resolver_comment,
+    };
+    
+    console.log('🔄 Updating resolver status:', id, payload);
+    
+    // ✅ FIXED: Using PATCH instead of POST
+    return apiService.patch(`/resolver/requests/${id}/status`, payload);
+  },
 };
-
 export const adminAPI = {
   setAuthToken: setAuthTokenGlobal,
   getCurrentToken: () => authToken,
@@ -317,16 +380,128 @@ export const adgAPI = {
   getDashboard: () => apiService.get('/adg/dashboard'),
 };
 
+// src/services/api/deptHeadAPI.js
+
+// Assuming apiService is your axios instance or similar HTTP client
+// e.g., import apiService from './apiService';
+
 export const deptHeadAPI = {
-  getDashboard: () => apiService.get('/dept-head/dashboard'),
+  // Dashboard / Statistics
   getStatistics: () => apiService.get('/dept-head/statistics'),
-  getPendingRequests: (params = {}) => apiService.get('/dept-head/pending-requests', { params }),
-  getRequestHistory: (params = {}) => apiService.get('/dept-head/history', { params }),
-  getRequestDetails: (id) => apiService.get(`/dept-head/requests/${id}`),
-  approveRequest: (id) => apiService.post(`/dept-head/requests/${id}/approve`),
-  rejectRequest: (id, reason) => apiService.post(`/dept-head/requests/${id}/reject`, {
-    rejection_reason: reason
-  }),
+
+  // Pending & History Requests
+  getPendingRequests: (params = {}) => 
+    apiService.get('/dept-head/pending-requests', { params }),
+
+  getRequestHistory: (params = {}) => 
+    apiService.get('/dept-head/history', { params }),
+
+  // Single Request Details
+  getRequestDetails: (id) => 
+    apiService.get(`/dept-head/requests/${id}`),
+
+  // Approve / Reject Request
+  approveRequest: (id) => 
+    apiService.post(`/dept-head/requests/${id}/approve`),
+
+  rejectRequest: (id, rejectionReason) => 
+    apiService.post(`/dept-head/requests/${id}/reject`, {
+      rejection_reason: rejectionReason,
+    }),
+
+  // Project Conversations & Responses
+  // List projects with recent assigner activity
+  getProjectsWithActivity: (params = {}) => 
+    apiService.get('/dept-head/projects-with-activity', { params }),
+
+  // Get all conversations for a specific project
+  getProjectConversations: (projectId) => 
+    apiService.get(`/dept-head/projects/${projectId}/conversations`),
+
+  // Get the latest unresponded message for a project
+  getLatestUnrespondedMessage: (projectId) => 
+    apiService.get(`/dept-head/projects/${projectId}/latest-unresponded`),
+
+  // Respond to a specific conversation (accept/reject)
+ respondToConversation: (conversationId, payload) => {
+  const formData = new FormData();
+
+  // Required fields
+  formData.append('status', payload.status);        // 'accepted' or 'rejected'
+  formData.append('remarks', payload.remarks || '');
+
+  // File field
+  if (payload.attachment) {
+    formData.append('attachments', {
+      uri: payload.attachment.uri,
+      type: payload.attachment.type || 'image/jpeg',
+      name: payload.attachment.name || `response_${Date.now()}.jpg`,
+    });
+
+  }
+
+  // ✅ KEY FIX: Explicitly set headers for this specific request
+  return apiService.post(
+    `/dept-head/respond/${conversationId}`, 
+    formData,
+    {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      // ✅ This tells axios to NOT transform the FormData
+      transformRequest: (data) => data,
+    }
+  );
+},
+downloadAuthenticatedFile: async (url, filename) => {
+  try {
+    const token = await getToken(); // ← this is the internal getToken in apiService.js – it works here
+    if (!token) {
+      throw new Error('No authentication token found. Please login again.');
+    }
+    console.log('Downloading file with token:', token.substring(0, 15) + '...');
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'Unknown error');
+      throw new Error(`Server rejected download: ${response.status} - ${errorText}`);
+    }
+
+    const blob = await response.blob();
+    const reader = new FileReader();
+    reader.readAsDataURL(blob);
+
+    return new Promise((resolve, reject) => {
+      reader.onloadend = async () => {
+        const base64data = reader.result.split(',')[1];
+        const filePath = `${RNFS.DocumentDirectoryPath}/${filename}`;
+
+        try {
+          await RNFS.writeFile(filePath, base64data, 'base64');
+          Alert.alert('Success', `File downloaded to:\n${filePath}`);
+          console.log('File saved successfully:', filePath);
+          resolve(filePath);
+        } catch (writeErr) {
+          reject(writeErr);
+        }
+      };
+      reader.onerror = reject;
+    });
+  } catch (err) {
+    console.error('Authenticated file download failed:', err);
+    Alert.alert('Download Failed', err.message || 'Check login status or file URL');
+    throw err;
+  }
+},
+  // Optional: If you want to keep a dashboard endpoint (not present in controller)
+  // You can remove this if not needed
+  getDashboard: () => apiService.get('/dept-head/dashboard'),
 };
 
 export const testAPI = {
