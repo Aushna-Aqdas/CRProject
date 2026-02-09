@@ -67,10 +67,12 @@ const AppNavigator = () => {
   }, [token, loading]);
 
   return (
-    <NavigationContainer>
+     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {token && user ? (
-          // AUTHENTICATED - Show role-based screens
+        {/* 🔹 Show Splash while loading auth state */}
+        {loading ? (
+          <Stack.Screen name="Splash" component={SplashScreen} />
+        ) : token && user ? (
           <>
             {parseInt(user.role) === 1 && (
               <>

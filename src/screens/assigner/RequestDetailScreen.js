@@ -27,9 +27,7 @@ import RNBlobUtil from 'react-native-blob-util';
 
 const { width } = Dimensions.get('window');
 
-// ────────────────────────────────────────────────
-// Modern Custom Dropdown (same style as AssignProjectsToUsers)
-// ────────────────────────────────────────────────
+
 const CustomDropdown = ({
   label,
   options,
@@ -736,15 +734,26 @@ const RequestDetailScreen = () => {
                 <View style={styles.infoItem}>
                   <Text style={styles.infoLabel}>Priority</Text>
                   <View style={[styles.priorityBadge, { borderColor: getPriorityColor(request.priority) }]}>
-                    <Icon 
-                      name={
-                        request.priority?.toLowerCase() === 'high' ? 'exclamation-triangle' :
-                        request.priority?.toLowerCase() === 'normal' ? 'minus-circle' :
-                        'arrow-down-circle'
-                      } 
-                      size={14} 
-                      color={getPriorityColor(request.priority)} 
-                    />
+                  {request.priority?.toLowerCase() === 'low' ? (
+  <IconFA
+    name="arrow-down"
+    size={14}
+    color={getPriorityColor(request.priority)}
+  />
+) : (
+  <Icon
+    name={
+      request.priority?.toLowerCase() === 'high'
+        ? 'exclamation-triangle'
+        : request.priority?.toLowerCase() === 'normal'
+        ? 'minus-circle'
+        : 'minus-circle'
+    }
+    size={14}
+    color={getPriorityColor(request.priority)}
+  />
+)}
+
                     <Text style={[styles.priorityText, { color: getPriorityColor(request.priority) }]}>
                       {request.priority_label || request.priority || 'Normal'}
                     </Text>

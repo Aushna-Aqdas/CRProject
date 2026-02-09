@@ -1,7 +1,10 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import RNFS from 'react-native-fs';
+import { Alert } from 'react-native';
 
-const BASE_URL = 'http://10.50.206.67:8000/api';
+
+const BASE_URL = 'http://10.50.207.143:8000/api';
 
 // Create axios instance
 const apiService = axios.create({

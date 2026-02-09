@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,6 @@ import {
   ScrollView,
   Dimensions,
   StatusBar,
-  DrawerLayoutAndroid,
   RefreshControl,
   Alert,
 } from 'react-native';
@@ -27,9 +26,7 @@ const { width } = Dimensions.get('window');
 const AssignerDashboardScreen = () => {
   const { logout, user } = useAuth();
   const navigation = useNavigation();
-  const drawerRef = useRef(null);
 
-  // All hooks declared at the top - NEVER conditional
   const [requests, setRequests] = useState([]);
   const [stats, setStats] = useState({
     total: 0,
@@ -43,14 +40,13 @@ const AssignerDashboardScreen = () => {
   const [filter, setFilter] = useState('all');
   const [error, setError] = useState(null);
 
-  // Fetch requests function
   const fetchRequests = async () => {
     try {
       setLoading(true);
       setError(null);
 
       const res = await api.assigner.getDashboard();
-      
+
       if (res.data.success) {
         setRequests(res.data.requests || []);
         setStats(res.data.stats || {
@@ -91,19 +87,14 @@ const AssignerDashboardScreen = () => {
     }
   };
 
-  // Effects
   useEffect(() => {
     fetchRequests();
   }, []);
 
-  // Handler functions
   const onRefresh = () => {
     setRefreshing(true);
     fetchRequests();
   };
-
-  const openDrawer = () => drawerRef.current?.openDrawer();
-  const closeDrawer = () => drawerRef.current?.closeDrawer();
 
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure?', [
@@ -119,7 +110,6 @@ const AssignerDashboardScreen = () => {
     ]);
   };
 
-  // Filter requests based on search and filter
   const filteredRequests = requests.filter(item => {
     const statusMatch =
       filter === 'all' || item.status?.toLowerCase() === filter;
@@ -130,7 +120,6 @@ const AssignerDashboardScreen = () => {
     return statusMatch && searchMatch;
   });
 
-  // Render functions
   const renderRequest = ({ item, index }) => (
     <Animatable.View
       animation="fadeInUp"
@@ -149,11 +138,11 @@ const AssignerDashboardScreen = () => {
           <Text style={[styles.statusBadge, statusColors[item.status?.toLowerCase()]]}>
             {item.status_label || item.status || 'unknown'}
           </Text>
-          
+
           {item.via_dept_head === true && (
             <Text style={styles.deptHeadBadge}>Via Dept Head</Text>
           )}
-          
+
           <Text style={[styles.priorityBadge, priorityColors[item.priority?.toLowerCase()]]}>
             {item.priority_label || item.priority || 'Normal'}
           </Text>
@@ -181,8 +170,8 @@ const AssignerDashboardScreen = () => {
       <Icon name="inbox" size={60} color="#ccc" />
       <Text style={styles.emptyStateTitle}>No Requests Found</Text>
       <Text style={styles.emptyStateText}>
-        {filter === 'all' 
-          ? 'No requests available for your assigned projects' 
+        {filter === 'all'
+          ? 'No requests available for your assigned projects'
           : `No ${filter} requests`}
       </Text>
       <TouchableOpacity style={styles.refreshButton} onPress={fetchRequests}>
@@ -215,17 +204,17 @@ const AssignerDashboardScreen = () => {
             <Text style={[styles.statValue, { color: statColors.total }]}>{stats.total}</Text>
             <Text style={styles.statLabel}>Total Requests</Text>
           </View>
-          
+
           <View style={styles.statCard}>
             <Text style={[styles.statValue, { color: statColors.pending }]}>{stats.pending}</Text>
             <Text style={styles.statLabel}>Pending</Text>
           </View>
-          
+
           <View style={styles.statCard}>
             <Text style={[styles.statValue, { color: statColors.inprogress }]}>{stats.in_progress}</Text>
             <Text style={styles.statLabel}>In Progress</Text>
           </View>
-          
+
           <View style={styles.statCard}>
             <Text style={[styles.statValue, { color: statColors.completed }]}>{stats.completed}</Text>
             <Text style={styles.statLabel}>Completed</Text>
@@ -261,44 +250,6 @@ const AssignerDashboardScreen = () => {
     </>
   );
 
-  const navigationView = (
-    <View style={styles.drawerContainer}>
-      <LinearGradient colors={['#2C3E50', '#4ECDC4']} style={styles.drawerHeader}>
-        <View style={styles.drawerHeaderContent}>
-          <View style={styles.userAvatar}>
-            <Icon name="user" size={40} color="#fff" />
-          </View>
-          <Text style={styles.drawerUserName}>{user?.name || 'Assigner'}</Text>
-          <Text style={styles.drawerUserRole}>Assigner</Text>
-        </View>
-      </LinearGradient>
-
-      <View style={styles.drawerMenu}>
-        <TouchableOpacity style={styles.drawerItem} onPress={closeDrawer}>
-          <Icon name="home" size={20} color="#2C3E50" />
-          <Text style={styles.drawerItemText}>Dashboard</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.drawerItem} onPress={closeDrawer}>
-          <Icon name="list-alt" size={20} color="#2C3E50" />
-          <Text style={styles.drawerItemText}>All Requests</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.drawerItem, styles.logoutDrawerItem]}
-          onPress={() => {
-            closeDrawer();
-            handleLogout();
-          }}
-        >
-          <Icon name="sign-out" size={20} color="#e74c3c" />
-          <Text style={[styles.drawerItemText, styles.logoutText]}>Logout</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-
-  // Loading state
   if (loading && !refreshing) {
     return (
       <View style={styles.loadingContainer}>
@@ -308,41 +259,37 @@ const AssignerDashboardScreen = () => {
     );
   }
 
-  // Main render
   return (
-    <DrawerLayoutAndroid
-      ref={drawerRef}
-      drawerWidth={300}
-      drawerPosition="left"
-      renderNavigationView={() => navigationView}
-    >
-      <View style={styles.container}>
-        <StatusBar backgroundColor="#2C3E50" barStyle="light-content" />
+    <View style={styles.container}>
+      <StatusBar backgroundColor="#2C3E50" barStyle="light-content" />
 
-        <View style={styles.navbar}>
-          <TouchableOpacity style={styles.menuButton} onPress={openDrawer}>
-            <Icon name="bars" size={24} color="#fff" />
-          </TouchableOpacity>
-          <Text style={styles.navbarTitle}>Assigner Dashboard</Text>
-          <View style={styles.navbarRight}>
-            <TouchableOpacity style={styles.navbarIcon}>
-              <Icon name="user" size={20} color="#fff" />
-            </TouchableOpacity>
-          </View>
-        </View>
+      {/* NAVBAR */}
+      <View style={styles.navbar}>
+        {/* Left Icon */}
+        <TouchableOpacity style={styles.navbarIcon}>
+          <Icon name="user-circle" size={24} color="#fff" />
+        </TouchableOpacity>
 
-        <FlatList
-          data={filteredRequests}
-          keyExtractor={item => item.id.toString()}
-          renderItem={renderRequest}
-          ListEmptyComponent={renderEmptyState}
-          ListHeaderComponent={renderHeader}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-        />
+        {/* Title */}
+        <Text style={styles.navbarTitle}>Assigner Dashboard</Text>
+
+        {/* Right Logout */}
+        <TouchableOpacity style={styles.navbarIcon} onPress={handleLogout}>
+          <Icon name="sign-out" size={22} color="#fff" />
+        </TouchableOpacity>
       </View>
-    </DrawerLayoutAndroid>
+
+      <FlatList
+        data={filteredRequests}
+        keyExtractor={item => item.id.toString()}
+        renderItem={renderRequest}
+        ListEmptyComponent={renderEmptyState}
+        ListHeaderComponent={renderHeader}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+      />
+    </View>
   );
 };
 
@@ -398,18 +345,10 @@ const styles = StyleSheet.create({
     shadowRadius: 3.84,
     elevation: 5,
   },
-  menuButton: {
-    padding: 8,
-  },
   navbarTitle: {
-    paddingLeft: 40,
     fontSize: 18,
     fontWeight: 'bold',
     color: '#fff',
-  },
-  navbarRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
   },
   navbarIcon: {
     padding: 8,
@@ -420,7 +359,6 @@ const styles = StyleSheet.create({
     paddingBottom: 30,
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
-    marginTop: 0,
     marginBottom: 9,
   },
   welcomeText: {
@@ -433,63 +371,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#fff',
     opacity: 0.9,
-  },
-  drawerContainer: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  drawerHeader: {
-    padding: 20,
-    paddingTop: 60,
-    paddingBottom: 30,
-  },
-  drawerHeaderContent: {
-    alignItems: 'center',
-  },
-  userAvatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 15,
-  },
-  drawerUserName: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 5,
-  },
-  drawerUserRole: {
-    fontSize: 14,
-    color: '#fff',
-    opacity: 0.8,
-  },
-  drawerMenu: {
-    flex: 1,
-    padding: 20,
-  },
-  drawerItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 15,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    marginBottom: 5,
-  },
-  drawerItemText: {
-    fontSize: 16,
-    color: '#2C3E50',
-    marginLeft: 15,
-    fontWeight: '500',
-  },
-  logoutDrawerItem: {
-    marginTop: 'auto',
-    marginBottom: 20,
-  },
-  logoutText: {
-    color: '#e74c3c',
   },
   statsContainer: {
     padding: 20,
